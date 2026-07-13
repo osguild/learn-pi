@@ -1,0 +1,16 @@
+{
+  "name": "@osguild/learn-pi",
+  "version": "0.1.0",
+  "description": "A Socratic learning harness for pi — timer, journal, session start, and plan tracking.",
+  "keywords": ["pi-package"],
+  "license": "MIT",
+  "packageManager": "pnpm@9.12.0",
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}
