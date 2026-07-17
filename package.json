@@ -1,13 +1,16 @@
 {
   "name": "@osguild/learn-pi",
   "version": "0.1.0",
-  "description": "A Socratic learning harness for pi — timer, journal, session start, and plan tracking.",
+  "description": "A learning-completion harness for pi — edge marker, pre-computed next action, flow-shaped sessions, cue/routine/reward loop, scope guard + scaffolder, and reflection loop.",
   "keywords": ["pi-package"],
   "license": "MIT",
   "packageManager": "pnpm@9.12.0",
   "pi": {
-    "extensions": ["./extensions"],
+    "extensions": ["./extensions/index.ts"],
     "skills": ["./skills"]
+  },
+  "dependencies": {
+    "typebox": "^1.1.38"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
