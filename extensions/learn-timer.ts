@@ -371,7 +371,9 @@ export default function learnTimer(pi: ExtensionAPI) {
 
 	async function persistState(): Promise<void> {
 		await mkdir(TIMER_DIR, { recursive: true });
-		const tmp = `${STATE_FILE}.tmp`;
+		// Use a unique tmp path per call so concurrent persistState() calls don't
+		// clobber each other's tmp file (which caused ENOENT on rename).
+		const tmp = `${STATE_FILE}.${process.pid}.${randomUUID()}.tmp`;
 		await writeFile(tmp, JSON.stringify(state, null, 2), "utf8");
 		await rename(tmp, STATE_FILE);
 	}

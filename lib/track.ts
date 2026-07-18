@@ -57,6 +57,22 @@ export interface Yak {
 	resolved: boolean;
 }
 
+/**
+ * A reading/viewing resource attached to a track or to a single material unit.
+ * Track-level resources cover background reading not tied to any unit; unit-
+ * level resources travel with their unit and surface when that unit is active.
+ */
+export type ResourceKind = "article" | "doc" | "video" | "book" | "paper" | "repo" | "other";
+
+export interface Resource {
+	id: string;
+	title: string;
+	url: string;
+	kind?: ResourceKind;
+	added_at: string;
+	note?: string;
+}
+
 export interface MaterialUnit {
 	id: string;
 	title: string;
@@ -64,6 +80,8 @@ export interface MaterialUnit {
 	difficulty: "easy" | "medium" | "hard";
 	status: "pending" | "active" | "done" | "skipped";
 	notes?: string;
+	/** Per-unit reading resources; travel with this unit. */
+	resources?: Resource[];
 }
 
 export interface MaterialGraph {
@@ -123,6 +141,8 @@ export interface Track {
 	next_action: string;
 	next_action_set_at: string;
 	deferred_yaks: Yak[];
+	/** Track-level reading resources not tied to a specific material unit. */
+	resources: Resource[];
 	material_graph: MaterialGraph;
 	log: SessionLogEntry[];
 	stall_counter: number;
@@ -182,6 +202,7 @@ export function freshTrack(partial: Partial<Track> & Pick<Track, "id" | "label">
 		next_action: partial.next_action ?? "(not set — run /learn-plan to set the next concrete action)",
 		next_action_set_at: partial.next_action_set_at ?? now,
 		deferred_yaks: partial.deferred_yaks ?? [],
+		resources: partial.resources ?? [],
 		material_graph: partial.material_graph ?? { source: null, units: [], revised_at: null },
 		log: partial.log ?? [],
 		stall_counter: partial.stall_counter ?? 0,
@@ -311,6 +332,16 @@ export async function appendSessionLog(entry: SessionLogEntry, trackId: string):
 
 export function newYak(desc: string): Yak {
 	return { id: `yak-${randomUUID().slice(0, 8)}`, desc, added_at: new Date().toISOString(), resolved: false };
+}
+
+export function newResource(title: string, url: string, kind?: ResourceKind): Resource {
+	return {
+		id: `res-${randomUUID().slice(0, 8)}`,
+		title,
+		url,
+		kind,
+		added_at: new Date().toISOString(),
+	};
 }
 
 export function newUnit(title: string): MaterialUnit {

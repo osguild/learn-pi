@@ -5,12 +5,22 @@
   "keywords": ["pi-package"],
   "license": "MIT",
   "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dashboard:dev": "concurrently -n api,web -c blue,green \"tsx lib/dashboard.ts\" \"cd dashboard && vite\"",
+    "dashboard:build": "cd dashboard && vite build",
+    "dashboard:preview": "tsx lib/dashboard.ts"
+  },
   "pi": {
     "extensions": ["./extensions/index.ts"],
     "skills": ["./skills"]
   },
   "dependencies": {
     "typebox": "^1.1.38"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "vite": "^5.4.11"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

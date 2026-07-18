@@ -4,6 +4,7 @@
  */
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { MaterialUnit, Resource } from "./track";
 
 export function formatClock(sec: number): string {
 	const s = Math.max(0, sec);
@@ -50,6 +51,8 @@ export function renderTrackDashboard(
 		next_action: string;
 		stall_counter: number;
 		process_contract: { session_min: number };
+		resources?: Resource[];
+		material_graph?: { units: MaterialUnit[] };
 	},
 	width: number,
 ): string[] {
@@ -66,5 +69,36 @@ export function renderTrackDashboard(
 	if (track.stall_counter > 0) {
 		lines.push(theme.fg("muted", `  stall: ${track.stall_counter} session${track.stall_counter === 1 ? "" : "s"} without progress`));
 	}
+	appendResourcesSection(lines, track, theme, innerWidth);
 	return lines;
+}
+
+/**
+ * Surface resources relevant to *now*: track-level reading + resources on the
+ * active material unit (if any). Stays silent when empty so the dashboard
+ * stays clean for tracks that don't use resources.
+ */
+function appendResourcesSection(
+	lines: string[],
+	track: {
+		resources?: Resource[];
+		material_graph?: { units: MaterialUnit[] };
+	},
+	theme: ExtensionCommandContext["ui"]["theme"],
+	innerWidth: number,
+): void {
+	const trackRes = track.resources ?? [];
+	const activeUnit = track.material_graph?.units.find((u) => u.status === "active");
+	const unitRes = activeUnit?.resources ?? [];
+	if (trackRes.length === 0 && unitRes.length === 0) return;
+	lines.push(theme.fg("dim", "  resources:"));
+	for (const r of trackRes) {
+		lines.push(theme.fg("dim", `    [track] ${truncatePlain(r.title, innerWidth - 12)}`));
+	}
+	if (activeUnit && unitRes.length > 0) {
+		const tag = `[unit:${truncatePlain(activeUnit.title, 20)}]`;
+		for (const r of unitRes) {
+			lines.push(theme.fg("dim", `    ${tag} ${truncatePlain(r.title, innerWidth - 12 - tag.length)}`));
+		}
+	}
 }

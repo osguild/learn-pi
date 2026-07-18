@@ -25,9 +25,11 @@ import learnScaffold from "./learn-scaffold";
 import learnStudy from "./learn-study";
 import learnCue from "./learn-cue";
 import learnYaks from "./learn-yaks";
+import learnResources from "./learn-resources";
 import learnStatus from "./learn-status";
 import learnMigrate from "./learn-migrate";
 import learnWeb from "./learn-web";
+import learnDashboard from "./learn-dashboard";
 
 const DASHBOARD_WIDGET = "learn-start";
 const DASHBOARD_WIDTH = 80;
@@ -43,9 +45,11 @@ export default function learnPi(pi: ExtensionAPI) {
 	learnStudy(pi);
 	learnCue(pi);
 	learnYaks(pi);
+	learnResources(pi);
 	learnStatus(pi);
 	learnMigrate(pi);
 	learnWeb(pi);
+	learnDashboard(pi);
 
 	// The persistence fix: on session_start, render the active track's
 	// edge + next_action as a widget immediately. No command required.
