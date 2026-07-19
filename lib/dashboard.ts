@@ -13,6 +13,7 @@
  *   GET  /api/sessions            -> SessionLogLine[] (cross-track, newest last)
  *   GET  /api/timer               -> TimerState (best-effort; null if absent)
  *   GET  /api/markdown?track=&url= -> MarkdownDocument (local .md under work_dir)
+ *   GET  /api/docs/:slug           -> DashboardDoc (bundled dashboard docs)
  *
  * Binds 127.0.0.1 only — localhost visualization, not a network service.
  */
@@ -33,6 +34,7 @@ import {
 } from "./track";
 import { LEARN_ROOT, SESSIONS_LOG } from "./paths";
 import { readMarkdownForTrack } from "./markdown-serve";
+import { readDashboardDoc } from "./docs-serve";
 
 export interface DashboardServerOptions {
 	port?: number;
@@ -237,6 +239,19 @@ async function apiRoute(
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			sendJson(res, 403, { error: msg });
+		}
+		return;
+	}
+	const docMatch = pathname.match(/^\/api\/docs\/([^/]+)$/);
+	if (docMatch) {
+		const slug = decodeURIComponent(docMatch[1]).replace(/\.md$/, "");
+		try {
+			const doc = await readDashboardDoc(slug);
+			sendJson(res, 200, doc);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			const status = msg.includes("ENOENT") ? 404 : 400;
+			sendJson(res, status, { error: msg });
 		}
 		return;
 	}
