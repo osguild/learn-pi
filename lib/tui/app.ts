@@ -61,7 +61,7 @@ export class LearnTuiApp implements Component {
 			return;
 		}
 
-		if (matchesKey(data, "R")) {
+		if (matchesKey(data, "shift+r")) {
 			void this.refresh();
 			return;
 		}

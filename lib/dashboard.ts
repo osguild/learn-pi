@@ -12,6 +12,7 @@
  *   GET  /api/tracks/:id          -> Track
  *   GET  /api/sessions            -> SessionLogLine[] (cross-track, newest last)
  *   GET  /api/timer               -> TimerState (best-effort; null if absent)
+ *   GET  /api/markdown?track=&url= -> MarkdownDocument (local .md under work_dir)
  *
  * Binds 127.0.0.1 only — localhost visualization, not a network service.
  */
@@ -31,6 +32,7 @@ import {
 	type SessionLogEntry,
 } from "./track";
 import { LEARN_ROOT, SESSIONS_LOG } from "./paths";
+import { readMarkdownForTrack } from "./markdown-serve";
 
 export interface DashboardServerOptions {
 	port?: number;
@@ -160,7 +162,7 @@ async function handle(
 
 	try {
 		if (pathname.startsWith("/api/")) {
-			await apiRoute(pathname, res);
+			await apiRoute(pathname, url.searchParams, res);
 			return;
 		}
 		await staticRoute(pathname, res, staticDir);
@@ -172,7 +174,11 @@ async function handle(
 
 // --- API --------------------------------------------------------------------
 
-async function apiRoute(pathname: string, res: ServerResponse): Promise<void> {
+async function apiRoute(
+	pathname: string,
+	searchParams: URLSearchParams,
+	res: ServerResponse,
+): Promise<void> {
 	if (pathname === "/api/index") {
 		const idx = await loadIndex();
 		sendJson(res, 200, idx);
@@ -211,6 +217,27 @@ async function apiRoute(pathname: string, res: ServerResponse): Promise<void> {
 			return;
 		}
 		sendJson(res, 200, state);
+		return;
+	}
+	if (pathname === "/api/markdown") {
+		const trackId = searchParams.get("track");
+		const url = searchParams.get("url");
+		if (!trackId || !url) {
+			sendJson(res, 400, { error: "Query params track and url are required" });
+			return;
+		}
+		const track = await loadTrack(trackId);
+		if (!track) {
+			sendJson(res, 404, { error: `Track "${trackId}" not found` });
+			return;
+		}
+		try {
+			const doc = await readMarkdownForTrack(track, url);
+			sendJson(res, 200, doc);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			sendJson(res, 403, { error: msg });
+		}
 		return;
 	}
 	sendJson(res, 404, { error: `Unknown route ${pathname}` });

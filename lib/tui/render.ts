@@ -174,7 +174,7 @@ export function renderHelpBody(theme: Theme, width: number): string[] {
 		["y", "deferred yaks"],
 		["r", "resources"],
 		["?", "this help"],
-		["R", "refresh data"],
+		["shift+r", "refresh data"],
 		["esc", "back / quit from home"],
 		["q", "quit"],
 	];
@@ -191,7 +191,7 @@ export function renderScreenTitle(theme: Theme, title: string, width: number): s
 
 export function renderFooter(theme: Theme, screen: string, width: number): string[] {
 	const hints: Record<string, string> = {
-		home: "t tracks · m material · l log · y yaks · r resources · ? help · R refresh · q quit",
+		home: "t tracks · m material · l log · y yaks · r resources · ? help · shift+r refresh · q quit",
 		tracks: "↑↓ navigate · enter select · esc back",
 		material: "esc home · q quit",
 		log: "esc home · q quit",
