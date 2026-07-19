@@ -15,6 +15,10 @@
  *   port: LEARN_DASHBOARD_PORT env or 7331
  *   bind: 127.0.0.1 (localhost only)
  *
+ * If the preferred port is busy, start scans upward (7331 → 7332 → …).
+ * Running start again without an explicit port closes the in-process server
+ * and restarts on the next free port (previous port + 1, then scan).
+ *
  * If dashboard/dist is missing, the server still starts but the root page
  * shows a "build first" message; the JSON API works regardless.
  */
@@ -68,10 +72,22 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 }
 
 async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContext): Promise<void> {
-	if (server) {
-		ctx.ui.notify(`Dashboard already running at ${server.url}`, "info");
-		return;
+	let preferredPort: number | undefined;
+	if (portArg) {
+		preferredPort = Number(portArg);
+	} else {
+		const envPort = Number(process.env.LEARN_DASHBOARD_PORT);
+		preferredPort = Number.isFinite(envPort) ? envPort : 7331;
 	}
+
+	if (server) {
+		if (!portArg) {
+			preferredPort = server.port + 1;
+		}
+		await server.close();
+		server = null;
+	}
+
 	if (!existsSync(DIST_DIR)) {
 		ctx.ui.notify(
 			[
@@ -83,20 +99,26 @@ async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContex
 			"warning",
 		);
 	}
-	const envPort = Number(process.env.LEARN_DASHBOARD_PORT);
-	const port = portArg ? Number(portArg) : (Number.isFinite(envPort) ? envPort : 7331);
-	if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+	if (!Number.isFinite(preferredPort) || preferredPort <= 0 || preferredPort > 65535) {
 		ctx.ui.notify(`Invalid port "${portArg}".`, "error");
 		return;
 	}
+	const requestedPort = preferredPort;
 	try {
-		server = await createDashboardServer({ port });
+		server = await createDashboardServer({ port: preferredPort });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		ctx.ui.notify(`Failed to start dashboard: ${msg}`, "error");
 		return;
 	}
-	ctx.ui.notify(`learn-pi dashboard: ${server.url}`, "info");
+	if (server.port !== requestedPort) {
+		ctx.ui.notify(
+			`Port ${requestedPort} in use — learn-pi dashboard: ${server.url}`,
+			"info",
+		);
+	} else {
+		ctx.ui.notify(`learn-pi dashboard: ${server.url}`, "info");
+	}
 	openBrowser(server.url);
 }
 

@@ -37,6 +37,8 @@ export interface DashboardServerOptions {
 	host?: string;
 	/** Filesystem dir containing the built SPA (dashboard/dist). */
 	staticDir?: string;
+	/** When the preferred port is busy, try successive ports up to this many attempts. */
+	portScanLimit?: number;
 }
 
 export interface DashboardServer {
@@ -74,14 +76,29 @@ function defaultStaticDir(): string {
 	return join(REPO_ROOT, "dashboard", "dist");
 }
 
-export async function createDashboardServer(
-	opts: DashboardServerOptions = {},
-): Promise<DashboardServer> {
-	const host = opts.host ?? "127.0.0.1";
-	const envPort = Number(process.env.LEARN_DASHBOARD_PORT);
-	const port = opts.port ?? (Number.isFinite(envPort) ? envPort : 7331);
-	const staticDir = normalize(opts.staticDir ?? defaultStaticDir());
+const DEFAULT_PORT = 7331;
+const DEFAULT_PORT_SCAN_LIMIT = 20;
 
+export function isAddrInUseError(err: unknown): boolean {
+	return (
+		typeof err === "object" &&
+		err !== null &&
+		"code" in err &&
+		(err as NodeJS.ErrnoException).code === "EADDRINUSE"
+	);
+}
+
+function resolvePreferredPort(port?: number): number {
+	if (port !== undefined) return port;
+	const envPort = Number(process.env.LEARN_DASHBOARD_PORT);
+	return Number.isFinite(envPort) ? envPort : DEFAULT_PORT;
+}
+
+async function listenDashboardServer(
+	host: string,
+	port: number,
+	staticDir: string,
+): Promise<Server> {
 	const server = createServer((req, res) => {
 		void handle(req, res, staticDir);
 	});
@@ -94,16 +111,43 @@ export async function createDashboardServer(
 		});
 	});
 
-	return {
-		server,
-		port,
-		host,
-		url: `http://${host}:${port}`,
-		close: () =>
-			new Promise<void>((resolve) => {
-				server.close(() => resolve());
-			}),
-	};
+	return server;
+}
+
+export async function createDashboardServer(
+	opts: DashboardServerOptions = {},
+): Promise<DashboardServer> {
+	const host = opts.host ?? "127.0.0.1";
+	const startPort = resolvePreferredPort(opts.port);
+	const staticDir = normalize(opts.staticDir ?? defaultStaticDir());
+	const scanLimit = opts.portScanLimit ?? DEFAULT_PORT_SCAN_LIMIT;
+
+	let lastError: unknown;
+	for (let attempt = 0; attempt < scanLimit; attempt++) {
+		const port = startPort + attempt;
+		try {
+			const httpServer = await listenDashboardServer(host, port, staticDir);
+			return {
+				server: httpServer,
+				port,
+				host,
+				url: `http://${host}:${port}`,
+				close: () =>
+					new Promise<void>((resolve) => {
+						httpServer.close(() => resolve());
+					}),
+			};
+		} catch (err) {
+			if (!isAddrInUseError(err)) throw err;
+			lastError = err;
+		}
+	}
+
+	const msg =
+		lastError instanceof Error
+			? lastError.message
+			: `No free port in ${startPort}–${startPort + scanLimit - 1}`;
+	throw new Error(msg);
 }
 
 async function handle(

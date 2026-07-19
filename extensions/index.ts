@@ -30,6 +30,7 @@ import learnStatus from "./learn-status";
 import learnMigrate from "./learn-migrate";
 import learnWeb from "./learn-web";
 import learnDashboard from "./learn-dashboard";
+import learnTui from "./learn-tui";
 
 const DASHBOARD_WIDGET = "learn-start";
 const DASHBOARD_WIDTH = 80;
@@ -50,6 +51,7 @@ export default function learnPi(pi: ExtensionAPI) {
 	learnMigrate(pi);
 	learnWeb(pi);
 	learnDashboard(pi);
+	learnTui(pi);
 
 	// The persistence fix: on session_start, render the active track's
 	// edge + next_action as a widget immediately. No command required.
