@@ -3,8 +3,14 @@ import type { SessionLogLine, TimerState, Track, TrackIndex } from "./types";
 import { getTimer, getIndex, getTracks, getTrack, getSessions, formatClock } from "./api";
 import { TrackList } from "./components/TrackList";
 import { TrackDetail } from "./components/TrackDetail";
+import { MarkdownViewer } from "./components/MarkdownViewer";
+import { parseDocViewerHash } from "./utils/resources";
 
 const POLL_MS = 5000;
+
+function readDocRoute(): { trackId: string; url: string } | null {
+  return parseDocViewerHash(window.location.hash);
+}
 
 export default function App() {
   const [index, setIndex] = useState<TrackIndex | null>(null);
@@ -14,6 +20,19 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionLogLine[]>([]);
   const [timer, setTimer] = useState<TimerState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [docRoute, setDocRoute] = useState(readDocRoute);
+
+  useEffect(() => {
+    const onHashChange = () => setDocRoute(readDocRoute());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (docRoute?.trackId) {
+      setSelectedId(docRoute.trackId);
+    }
+  }, [docRoute?.trackId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +83,11 @@ export default function App() {
 
   const timerRemaining = timer ? computeRemaining(timer) : 0;
 
+  const backFromDoc = () => {
+    window.location.hash = "";
+    setDocRoute(null);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -102,7 +126,13 @@ export default function App() {
           </div>
         </aside>
         <main className="main">
-          {selected && index ? (
+          {docRoute ? (
+            <MarkdownViewer
+              trackId={docRoute.trackId}
+              url={docRoute.url}
+              onBack={backFromDoc}
+            />
+          ) : selected && index ? (
             <TrackDetail track={selected} index={index} />
           ) : (
             <div className="empty">

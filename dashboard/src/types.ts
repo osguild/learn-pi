@@ -135,3 +135,9 @@ export interface TimerState {
 export interface SessionLogLine extends SessionLogEntry {
   track_id: string;
 }
+
+export interface MarkdownDocument {
+  title: string;
+  path: string;
+  content: string;
+}

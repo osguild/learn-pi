@@ -2,7 +2,7 @@
 // runtime (or proxied to :7331 in dev). Polling is the refresh model —
 // tracks change slowly, so 5s is plenty.
 
-import type { SessionLogLine, TimerState, Track, TrackIndex } from "./types";
+import type { MarkdownDocument, SessionLogLine, TimerState, Track, TrackIndex } from "./types";
 
 const API_BASE = "";
 
@@ -20,6 +20,8 @@ export const getTracks = async (): Promise<Track[]> => (await getJson<Track[]>("
 export const getTrack = async (id: string): Promise<Track> => normalizeTrack(await getJson<Track>(`/api/tracks/${encodeURIComponent(id)}`));
 export const getSessions = (): Promise<SessionLogLine[]> => getJson("/api/sessions").then((xs) => xs ?? []);
 export const getTimer = (): Promise<TimerState> => getJson("/api/timer");
+export const getMarkdown = (trackId: string, url: string): Promise<MarkdownDocument> =>
+  getJson(`/api/markdown?${new URLSearchParams({ track: trackId, url }).toString()}`);
 
 // Persisted track JSON may have `null` for array fields (older records, or
 // fields the writer left unset). Coerce to empty arrays so components can

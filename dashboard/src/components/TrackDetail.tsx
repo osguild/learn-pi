@@ -40,8 +40,8 @@ export function TrackDetail({ track, index }: Props) {
         <EdgeCard track={track} />
         <NextActionCard track={track} />
         <ProcessContractCard track={track} />
-        <MaterialGraph track={track} />
-        <ResourcesList resources={track.resources} />
+        <MaterialGraph trackId={track.id} track={track} />
+        <ResourcesList trackId={track.id} resources={track.resources} />
         <YaksList yaks={track.deferred_yaks} />
         <SessionLog entries={track.log} />
       </div>

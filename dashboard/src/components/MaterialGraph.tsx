@@ -1,4 +1,5 @@
 import type { MaterialUnit } from "../types";
+import { ResourceLink } from "./ResourceLink";
 
 const STATUS_LABEL: Record<MaterialUnit["status"], string> = {
   pending: "pending",
@@ -7,7 +8,13 @@ const STATUS_LABEL: Record<MaterialUnit["status"], string> = {
   skipped: "skipped",
 };
 
-export function MaterialGraph({ track }: { track: { material_graph: { source: string | null; units: MaterialUnit[]; revised_at: string | null } } }) {
+export function MaterialGraph({
+  trackId,
+  track,
+}: {
+  trackId: string;
+  track: { material_graph: { source: string | null; units: MaterialUnit[]; revised_at: string | null } };
+}) {
   const mg = track.material_graph;
   if (mg.units.length === 0) {
     return (
@@ -39,9 +46,7 @@ export function MaterialGraph({ track }: { track: { material_graph: { source: st
               <ul className="unit-res">
                 {u.resources.map((r) => (
                   <li key={r.id}>
-                    <a href={r.url} target="_blank" rel="noreferrer">
-                      {r.title}
-                    </a>
+                    <ResourceLink trackId={trackId} resource={r} />
                     {r.kind && <span className="dim small"> · {r.kind}</span>}
                   </li>
                 ))}

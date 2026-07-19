@@ -1,6 +1,7 @@
 import type { Resource, Yak } from "../types";
+import { ResourceLink } from "./ResourceLink";
 
-export function ResourcesList({ resources }: { resources: Resource[] }) {
+export function ResourcesList({ trackId, resources }: { trackId: string; resources: Resource[] }) {
   if (resources.length === 0) return null;
   return (
     <div className="card resources">
@@ -8,7 +9,7 @@ export function ResourcesList({ resources }: { resources: Resource[] }) {
       <ul className="res-list">
         {resources.map((r) => (
           <li key={r.id}>
-            <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
+            <ResourceLink trackId={trackId} resource={r} />
             {r.kind && <span className="dim small"> · {r.kind}</span>}
             {r.note && <div className="dim small">{r.note}</div>}
           </li>

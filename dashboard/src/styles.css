@@ -391,3 +391,126 @@ code, .mono {
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
 }
+
+.markdown-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 420px;
+}
+
+.markdown-view-header {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 20px;
+}
+
+.back-btn {
+  align-self: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 10px;
+}
+.back-btn:hover {
+  border-color: var(--accent);
+}
+
+.markdown-view-meta h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.markdown-body {
+  max-width: 760px;
+  line-height: 1.65;
+  margin: 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 1.4em 0 0.6em;
+  line-height: 1.25;
+}
+.markdown-body h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+.markdown-body h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
+.markdown-body h3 { font-size: 1.15em; }
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body pre,
+.markdown-body blockquote {
+  margin: 0 0 1em;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.4em;
+}
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+.markdown-body code {
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+.markdown-body pre {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  padding: 12px 14px;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--border);
+  color: var(--dim);
+  margin-left: 0;
+  padding: 0.1em 0 0.1em 1em;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  display: block;
+  margin-bottom: 1em;
+  overflow-x: auto;
+  width: max-content;
+  max-width: 100%;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+}
+.markdown-body th {
+  background: var(--panel-2);
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+.markdown-body a {
+  color: var(--accent);
+}

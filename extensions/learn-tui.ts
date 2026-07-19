@@ -8,7 +8,7 @@
  *
  * Keys (home):
  *   t tracks · m material · l log · y yaks · r resources · ? help
- *   R refresh · esc/q quit
+ *   shift+r refresh · esc/q quit
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
