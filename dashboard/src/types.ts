@@ -141,3 +141,10 @@ export interface MarkdownDocument {
   path: string;
   content: string;
 }
+
+export interface DashboardDoc {
+  title: string;
+  slug: string;
+  path: string;
+  content: string;
+}

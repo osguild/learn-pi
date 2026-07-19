@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
-import { getMarkdown } from "../api";
-import type { MarkdownDocument } from "../types";
+import { getDoc } from "../api";
+import type { DashboardDoc } from "../types";
 import { MarkdownScrollView } from "./MarkdownScrollView";
 
 interface Props {
-  trackId: string;
-  url: string;
+  slug: string;
   onBack: () => void;
 }
 
-export function MarkdownViewer({ trackId, url, onBack }: Props) {
-  const [doc, setDoc] = useState<MarkdownDocument | null>(null);
+export function DocsViewer({ slug, onBack }: Props) {
+  const [doc, setDoc] = useState<DashboardDoc | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -19,7 +18,7 @@ export function MarkdownViewer({ trackId, url, onBack }: Props) {
     setLoading(true);
     setError(null);
     setDoc(null);
-    getMarkdown(trackId, url)
+    getDoc(slug)
       .then((d) => {
         if (!cancelled) setDoc(d);
       })
@@ -32,17 +31,16 @@ export function MarkdownViewer({ trackId, url, onBack }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [trackId, url]);
+  }, [slug]);
 
   return (
     <MarkdownScrollView
       title={doc?.title}
-      subtitle={doc?.path}
       loading={loading}
       error={error}
       content={doc?.content ?? null}
       onBack={onBack}
-      backLabel="← Back to track"
+      backLabel="← Back to dashboard"
     />
   );
 }

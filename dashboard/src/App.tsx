@@ -4,12 +4,13 @@ import { getTimer, getIndex, getTracks, getTrack, getSessions, formatClock } fro
 import { TrackList } from "./components/TrackList";
 import { TrackDetail } from "./components/TrackDetail";
 import { MarkdownViewer } from "./components/MarkdownViewer";
-import { parseDocViewerHash } from "./utils/resources";
+import { DocsViewer } from "./components/DocsViewer";
+import { navigateAppRoute, parseAppRoute, type AppRoute } from "./utils/routes";
 
 const POLL_MS = 5000;
 
-function readDocRoute(): { trackId: string; url: string } | null {
-  return parseDocViewerHash(window.location.hash);
+function readAppRoute(): AppRoute {
+  return parseAppRoute(window.location.hash);
 }
 
 export default function App() {
@@ -20,19 +21,24 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionLogLine[]>([]);
   const [timer, setTimer] = useState<TimerState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [docRoute, setDocRoute] = useState(readDocRoute);
+  const [appRoute, setAppRoute] = useState(readAppRoute);
 
   useEffect(() => {
-    const onHashChange = () => setDocRoute(readDocRoute());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    const syncRoute = () => setAppRoute(parseAppRoute(window.location.hash));
+    syncRoute();
+    window.addEventListener("hashchange", syncRoute);
+    window.addEventListener("popstate", syncRoute);
+    return () => {
+      window.removeEventListener("hashchange", syncRoute);
+      window.removeEventListener("popstate", syncRoute);
+    };
   }, []);
 
   useEffect(() => {
-    if (docRoute?.trackId) {
-      setSelectedId(docRoute.trackId);
+    if (appRoute?.kind === "doc") {
+      setSelectedId(appRoute.trackId);
     }
-  }, [docRoute?.trackId]);
+  }, [appRoute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,15 +89,26 @@ export default function App() {
 
   const timerRemaining = timer ? computeRemaining(timer) : 0;
 
-  const backFromDoc = () => {
-    window.location.hash = "";
-    setDocRoute(null);
+  const goToDocs = () => {
+    const route: AppRoute = { kind: "docs", slug: "dashboard" };
+    navigateAppRoute(route);
+    setAppRoute(route);
+  };
+
+  const backFromOverlay = () => {
+    navigateAppRoute(null);
+    setAppRoute(null);
   };
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>learn-pi</h1>
+        <div className="app-header-left">
+          <h1>learn-pi</h1>
+          <button type="button" className="docs-btn" onClick={goToDocs}>
+            Docs
+          </button>
+        </div>
         {timer && (
           <div className={`timer-chip timer-${timer.mode}${timer.paused ? " paused" : ""}`}>
             <span className="timer-mode">{timer.mode}</span>
@@ -126,11 +143,13 @@ export default function App() {
           </div>
         </aside>
         <main className="main">
-          {docRoute ? (
+          {appRoute?.kind === "docs" ? (
+            <DocsViewer slug={appRoute.slug} onBack={backFromOverlay} />
+          ) : appRoute?.kind === "doc" ? (
             <MarkdownViewer
-              trackId={docRoute.trackId}
-              url={docRoute.url}
-              onBack={backFromDoc}
+              trackId={appRoute.trackId}
+              url={appRoute.url}
+              onBack={backFromOverlay}
             />
           ) : selected && index ? (
             <TrackDetail track={selected} index={index} />
