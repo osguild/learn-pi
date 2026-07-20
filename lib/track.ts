@@ -74,6 +74,23 @@ export interface Resource {
 	note?: string;
 }
 
+/**
+ * Track-wide glossary entry — a technical term and its definition, keyed to
+ * course documentation. Visibility only (like resources); not gated on progress.
+ */
+export interface GlossaryEntry {
+	id: string;
+	/** The term as it appears in docs (e.g. "qubit", "superposition"). */
+	term: string;
+	definition: string;
+	/** Doc path or URL where the term is introduced (optional). */
+	source?: string;
+	/** Material unit id if the term is scoped to one unit (optional). */
+	unit_id?: string;
+	added_at: string;
+	revised_at?: string;
+}
+
 export interface MaterialUnit {
 	id: string;
 	title: string;
@@ -164,6 +181,8 @@ export interface Track {
 	deferred_yaks: Yak[];
 	/** Track-level reading resources not tied to a specific material unit. */
 	resources: Resource[];
+	/** Technical terms from course docs — track-wide glossary. */
+	glossary: GlossaryEntry[];
 	material_graph: MaterialGraph;
 	log: SessionLogEntry[];
 	stall_counter: number;
@@ -225,6 +244,7 @@ export function freshTrack(partial: Partial<Track> & Pick<Track, "id" | "label">
 		next_action_set_at: partial.next_action_set_at ?? now,
 		deferred_yaks: partial.deferred_yaks ?? [],
 		resources: partial.resources ?? [],
+		glossary: partial.glossary ?? [],
 		material_graph: partial.material_graph ?? { source: null, units: [], revised_at: null },
 		log: partial.log ?? [],
 		stall_counter: partial.stall_counter ?? 0,
@@ -363,6 +383,22 @@ export function newResource(title: string, url: string, kind?: ResourceKind): Re
 		url,
 		kind,
 		added_at: new Date().toISOString(),
+	};
+}
+
+export function newGlossaryEntry(
+	term: string,
+	definition: string,
+	opts?: { source?: string; unit_id?: string },
+): GlossaryEntry {
+	const now = new Date().toISOString();
+	return {
+		id: `term-${randomUUID().slice(0, 8)}`,
+		term: term.trim(),
+		definition: definition.trim(),
+		source: opts?.source?.trim() || undefined,
+		unit_id: opts?.unit_id?.trim() || undefined,
+		added_at: now,
 	};
 }
 
@@ -596,4 +632,53 @@ export function resolveYak(track: Track, yakId: string): Track {
 	});
 	if (!found) throw new Error(`yak "${yakId}" not found`);
 	return { ...track, deferred_yaks };
+}
+
+export function addGlossaryEntry(
+	track: Track,
+	term: string,
+	definition: string,
+	now: string,
+	opts?: { source?: string; unit_id?: string },
+): Track {
+	const entry = newGlossaryEntry(term, definition, opts);
+	if (!entry.term) throw new Error("glossary term must be non-empty");
+	if (!entry.definition) throw new Error("glossary definition must be non-empty");
+	if (entry.unit_id && !track.material_graph.units.some((u) => u.id === entry.unit_id)) {
+		throw new Error(`unit "${entry.unit_id}" not found`);
+	}
+	return { ...track, glossary: [...(track.glossary ?? []), entry] };
+}
+
+export function updateGlossaryEntry(
+	track: Track,
+	entryId: string,
+	patch: Partial<Pick<GlossaryEntry, "term" | "definition" | "source" | "unit_id">>,
+	now: string,
+): Track {
+	let found = false;
+	const glossary = (track.glossary ?? []).map((e) => {
+		if (e.id !== entryId) return e;
+		found = true;
+		const term = patch.term !== undefined ? patch.term.trim() : e.term;
+		const definition = patch.definition !== undefined ? patch.definition.trim() : e.definition;
+		if (!term) throw new Error("glossary term must be non-empty");
+		if (!definition) throw new Error("glossary definition must be non-empty");
+		const unit_id = patch.unit_id !== undefined ? patch.unit_id.trim() || undefined : e.unit_id;
+		if (unit_id && !track.material_graph.units.some((u) => u.id === unit_id)) {
+			throw new Error(`unit "${unit_id}" not found`);
+		}
+		const source = patch.source !== undefined ? patch.source.trim() || undefined : e.source;
+		return { ...e, term, definition, source, unit_id, revised_at: now };
+	});
+	if (!found) throw new Error(`glossary entry "${entryId}" not found`);
+	return { ...track, glossary };
+}
+
+export function removeGlossaryEntry(track: Track, entryId: string): Track {
+	const glossary = track.glossary ?? [];
+	if (!glossary.some((e) => e.id === entryId)) {
+		throw new Error(`glossary entry "${entryId}" not found`);
+	}
+	return { ...track, glossary: glossary.filter((e) => e.id !== entryId) };
 }

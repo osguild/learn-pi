@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
+	addGlossaryEntry,
 	addResource,
 	addUnit,
 	addYak,
@@ -32,6 +33,7 @@ import {
 	loadTrack,
 	loadTrackOrThrow,
 	listTrackIds,
+	removeGlossaryEntry,
 	reviseCompass,
 	resolveYak,
 	saveTrack,
@@ -40,7 +42,9 @@ import {
 	setOverview,
 	setSessionMin,
 	setVerifyCommand,
+	updateGlossaryEntry,
 	updateUnit,
+	type GlossaryEntry,
 	type MaterialUnit,
 	type ResourceKind,
 	type SessionLogEntry,
@@ -49,6 +53,7 @@ import {
 	type TrackOverview,
 } from "./track";
 import { LEARN_ROOT, SESSIONS_LOG } from "./paths";
+import { mergeScannedGlossary, scanTrackGlossaryCandidates } from "./glossary-scan";
 import { readMarkdownForTrack } from "./markdown-serve";
 import { readDashboardDoc } from "./docs-serve";
 
@@ -295,6 +300,7 @@ async function apiRoute(
 const MAX_PATCH_BODY_BYTES = 64 * 1024;
 
 type UnitPatch = Partial<Pick<MaterialUnit, "title" | "status" | "difficulty" | "notes" | "prerequisites">>;
+type GlossaryPatch = Partial<Pick<GlossaryEntry, "term" | "definition" | "source" | "unit_id">>;
 
 interface PatchTrackBody {
 	// Scalar field replacements.
@@ -310,6 +316,10 @@ interface PatchTrackBody {
 	add_resource?: { title: string; url: string; kind?: ResourceKind };
 	add_yak?: { desc: string };
 	resolve_yak?: { id: string };
+	add_glossary?: { term: string; definition: string; source?: string; unit_id?: string };
+	update_glossary?: { id: string; patch: GlossaryPatch };
+	remove_glossary?: { id: string };
+	scan_glossary?: boolean;
 }
 
 const RESOURCE_KINDS: readonly ResourceKind[] = ["article", "doc", "video", "book", "paper", "repo", "other"];
@@ -352,6 +362,7 @@ function validatePatchBody(raw: unknown): PatchTrackBody {
 	const known = new Set([
 		"edge", "next_action", "outcome_compass", "verify_command", "session_min", "overview",
 		"add_unit", "update_unit", "add_resource", "add_yak", "resolve_yak",
+		"add_glossary", "update_glossary", "remove_glossary", "scan_glossary",
 	]);
 	for (const key of Object.keys(obj)) {
 		if (!known.has(key)) {
@@ -492,6 +503,65 @@ function validatePatchBody(raw: unknown): PatchTrackBody {
 		}
 		out.resolve_yak = { id: (r as { id: string }).id };
 	}
+	if ("add_glossary" in obj) {
+		const a = obj.add_glossary;
+		if (typeof a !== "object" || a === null) throw new Error("add_glossary must be an object");
+		const g = a as Record<string, unknown>;
+		if (!isString(g.term) || !isString(g.definition)) {
+			throw new Error("add_glossary must be { term: string, definition: string, source?, unit_id? }");
+		}
+		if (g.source !== undefined && !isString(g.source)) throw new Error("add_glossary.source must be a string");
+		if (g.unit_id !== undefined && !isString(g.unit_id)) throw new Error("add_glossary.unit_id must be a string");
+		out.add_glossary = {
+			term: g.term,
+			definition: g.definition,
+			source: isString(g.source) ? g.source : undefined,
+			unit_id: isString(g.unit_id) ? g.unit_id : undefined,
+		};
+	}
+	if ("update_glossary" in obj) {
+		const u = obj.update_glossary;
+		if (typeof u !== "object" || u === null || !isString((u as Record<string, unknown>).id)) {
+			throw new Error("update_glossary must be { id: string, patch: ... }");
+		}
+		const ur = u as Record<string, unknown>;
+		const patchRaw = ur.patch;
+		if (typeof patchRaw !== "object" || patchRaw === null || Array.isArray(patchRaw)) {
+			throw new Error("update_glossary.patch must be an object");
+		}
+		const p = patchRaw as Record<string, unknown>;
+		const patch: GlossaryPatch = {};
+		if (p.term !== undefined) {
+			if (!isString(p.term)) throw new Error("update_glossary.patch.term must be a string");
+			patch.term = p.term;
+		}
+		if (p.definition !== undefined) {
+			if (!isString(p.definition)) throw new Error("update_glossary.patch.definition must be a string");
+			patch.definition = p.definition;
+		}
+		if (p.source !== undefined) {
+			if (!isString(p.source)) throw new Error("update_glossary.patch.source must be a string");
+			patch.source = p.source;
+		}
+		if (p.unit_id !== undefined) {
+			if (!isString(p.unit_id)) throw new Error("update_glossary.patch.unit_id must be a string");
+			patch.unit_id = p.unit_id;
+		}
+		out.update_glossary = { id: ur.id as string, patch };
+	}
+	if ("remove_glossary" in obj) {
+		const r = obj.remove_glossary;
+		if (typeof r !== "object" || r === null || !isString((r as Record<string, unknown>).id)) {
+			throw new Error("remove_glossary must be { id: string }");
+		}
+		out.remove_glossary = { id: (r as { id: string }).id };
+	}
+	if ("scan_glossary" in obj) {
+		if (typeof obj.scan_glossary !== "boolean") {
+			throw new Error("scan_glossary must be a boolean");
+		}
+		out.scan_glossary = obj.scan_glossary;
+	}
 	return out;
 }
 
@@ -545,6 +615,18 @@ async function handlePatchTrack(
 		if (body.add_resource) track = addResource(track, body.add_resource.title, body.add_resource.url, body.add_resource.kind);
 		if (body.add_yak) track = addYak(track, body.add_yak.desc);
 		if (body.resolve_yak) track = resolveYak(track, body.resolve_yak.id);
+		if (body.add_glossary) {
+			track = addGlossaryEntry(track, body.add_glossary.term, body.add_glossary.definition, now, {
+				source: body.add_glossary.source,
+				unit_id: body.add_glossary.unit_id,
+			});
+		}
+		if (body.update_glossary) track = updateGlossaryEntry(track, body.update_glossary.id, body.update_glossary.patch, now);
+		if (body.remove_glossary) track = removeGlossaryEntry(track, body.remove_glossary.id);
+		if (body.scan_glossary) {
+			const candidates = await scanTrackGlossaryCandidates(track);
+			track = mergeScannedGlossary(track, candidates, now).track;
+		}
 	} catch (err) {
 		sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
 		return;

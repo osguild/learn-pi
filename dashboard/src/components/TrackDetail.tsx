@@ -4,6 +4,7 @@ import { CompassCard, OverviewCard, ProcessContractCard } from "./Cards";
 import { HeroPanel } from "./HeroPanel";
 import { MaterialGraph } from "./MaterialGraph";
 import { ResourcesList, YaksList } from "./Lists";
+import { GlossaryList } from "./GlossaryList";
 import { SessionLog } from "./SessionLog";
 
 interface Props {
@@ -65,7 +66,8 @@ export function TrackDetail({ track, index, onTrackChanged }: Props) {
         <h3 className="section-title">Materials</h3>
         <div className="section-grid materials-grid">
           <MaterialGraph trackId={track.id} track={track} onTrackChanged={onTrackChanged} />
-          <ResourcesList trackId={track.id} resources={track.resources} onTrackChanged={onTrackChanged} />
+          <GlossaryList track={track} onTrackChanged={onTrackChanged} />
+          <ResourcesList track={track} onTrackChanged={onTrackChanged} />
           <YaksList trackId={track.id} yaks={track.deferred_yaks} onTrackChanged={onTrackChanged} />
         </div>
       </section>

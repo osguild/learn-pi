@@ -64,16 +64,17 @@ export default function App() {
     };
   }, []);
 
-  // The current track id is route-driven: only track pages load a full Track.
-  const currentTrackId = appRoute?.kind === "track" ? appRoute.trackId : null;
+  // Load the full track on track pages and when viewing a unit guide / resource doc.
+  const routeTrackId =
+    appRoute?.kind === "track" ? appRoute.trackId : appRoute?.kind === "doc" ? appRoute.trackId : null;
 
   useEffect(() => {
     let cancelled = false;
-    if (!currentTrackId) {
+    if (!routeTrackId) {
       setSelected(null);
       return;
     }
-    getTrack(currentTrackId)
+    getTrack(routeTrackId)
       .then((t) => {
         if (!cancelled) setSelected(t);
       })
@@ -83,7 +84,9 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentTrackId, index, tracks]);
+  }, [routeTrackId, index, tracks]);
+
+  const currentTrackId = appRoute?.kind === "track" ? appRoute.trackId : null;
 
   // Immediate refetch of the current track after a dashboard edit, so the
   // UI reflects the change without waiting for the 5s poll.
@@ -120,7 +123,10 @@ export default function App() {
     setAppRoute(route);
   };
   const backFromOverlay = () => {
-    // After viewing a doc/resource, return to the track page (or home).
+    if (appRoute?.kind === "doc") {
+      goToTrack(appRoute.trackId);
+      return;
+    }
     if (currentTrackId) {
       goToTrack(currentTrackId);
     } else {
@@ -147,7 +153,7 @@ export default function App() {
       <Nav
         index={index ?? { active_track_id: null, tracks: [] }}
         tracks={tracks}
-        currentTrackId={currentTrackId}
+        currentTrackId={currentTrackId ?? (appRoute?.kind === "doc" ? appRoute.trackId : null)}
         onGoHome={goHome}
         onSelectTrack={goToTrack}
         onGoDocs={goToDocs}

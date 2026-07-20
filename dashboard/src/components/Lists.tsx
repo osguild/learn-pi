@@ -1,8 +1,9 @@
-import { useState } from "react";
-import type { Resource, ResourceKind, Yak } from "../types";
+import { useMemo, useState } from "react";
+import type { ResourceKind, Track, Yak } from "../types";
 import { patchTrack } from "../api";
 import { InlineAdd } from "./Editable";
 import { ResourcesTable } from "./ResourcesTable";
+import { collectAllResources } from "../utils/trackResources";
 
 const RESOURCE_KINDS: ResourceKind[] = ["article", "doc", "video", "book", "paper", "repo", "other"];
 
@@ -11,21 +12,22 @@ interface ListProps {
   onTrackChanged: () => void;
 }
 
-export function ResourcesList({ trackId, resources, onTrackChanged }: ListProps & { resources: Resource[] }) {
+export function ResourcesList({ track, onTrackChanged }: { track: Track; onTrackChanged: () => void }) {
   const [kind, setKind] = useState<ResourceKind>("article");
+  const allResources = useMemo(() => collectAllResources(track), [track]);
   const addResource = async (title: string) => {
     // The InlineAdd only captures a title; the URL is required by the API.
     // For the dashboard we treat the entered text as the title and reuse it
     // as the URL when it parses as one, otherwise fall back to a placeholder.
     const looksLikeUrl = /^https?:\/\//i.test(title) || /^[\w-]+(\.[\w-]+)+/.test(title);
     const url = looksLikeUrl ? (/^https?:\/\//i.test(title) ? title : `https://${title}`) : `about:blank#${encodeURIComponent(title)}`;
-    await patchTrack(trackId, { add_resource: { title, url, kind } });
+    await patchTrack(track.id, { add_resource: { title, url, kind } });
     onTrackChanged();
   };
   return (
     <div className="card resources">
-      <div className="card-title">track resources</div>
-      <ResourcesTable trackId={trackId} resources={resources} />
+      <div className="card-title">resources</div>
+      <ResourcesTable trackId={track.id} resources={allResources} />
       <div className="res-add">
         <select
           className="res-kind-select"

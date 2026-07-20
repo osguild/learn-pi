@@ -59,11 +59,16 @@ function normalizeTrack(t: Track): Track {
   return {
     ...t,
     resources: t.resources ?? [],
+    glossary: t.glossary ?? [],
     deferred_yaks: t.deferred_yaks ?? [],
     log: t.log ?? [],
     material_graph: {
       ...mg,
-      units: mg.units ?? [],
+      units: (mg.units ?? []).map((u) => ({
+        ...u,
+        prerequisites: u.prerequisites ?? [],
+        resources: u.resources ?? [],
+      })),
     },
   };
 }

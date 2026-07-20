@@ -48,6 +48,16 @@ export interface Resource {
   note?: string;
 }
 
+export interface GlossaryEntry {
+  id: string;
+  term: string;
+  definition: string;
+  source?: string;
+  unit_id?: string;
+  added_at: string;
+  revised_at?: string;
+}
+
 export interface MaterialUnit {
   id: string;
   title: string;
@@ -105,6 +115,7 @@ export interface Track {
   next_action_set_at: string;
   deferred_yaks: Yak[];
   resources: Resource[];
+  glossary: GlossaryEntry[];
   material_graph: MaterialGraph;
   log: SessionLogEntry[];
   stall_counter: number;

@@ -49,6 +49,10 @@ Every mechanism reads/writes one record. This is what `socrates-plan` failed to 
     "units": [],
     "revised_at": null
   },
+  "glossary": [
+    { "id": "gl-1", "term": "qubit", "definition": "Basic unit of quantum information.", "source": "file:///…/unit-theory-qubit.md", "unit_id": "unit-theory-qubit", "added_at": "..." }
+  ],
+  "resources": [],
   "log": [
     {
       "id": "sess-1",
@@ -80,6 +84,8 @@ Every mechanism reads/writes one record. This is what `socrates-plan` failed to 
 | `verify_command` | #4 retrieval-shaped verify property, #3 immediate feedback |
 | `deferred_yaks` | #6 Mode A |
 | `material_graph` | #11 (stubbed in v1 — `units` populated manually via `/learn-plan`) |
+| `glossary` | track-wide technical terms from course docs (visibility only; populated manually or via `/learn-glossary scan`) |
+| `resources` | track-level reading links (unit-level resources live on `material_graph.units[].resources`) |
 | `log` | #8 reflection record, #10 reward log, #1 cross-track variety signal |
 | `stall_counter` | #8 double-loop trigger (Argyris) |
 | `work_dir` | #6 Mode B (scaffolder creates + points here), #2 next-action executes here |
@@ -132,6 +138,8 @@ All commands are slash-commands exposed via the package's extensions. Naming: `/
 | `/learn-status` | cross-track view, edge + next-action for all tracks | no | `socrates-status` |
 | `/learn-web [status\|search\|fetch]` | web tools status + direct (non-LLM) search/fetch | no | NEW |
 | `/learn-ingest <source>` | #11 (STUBBED in v1 — prints "coming in v1.1, use /learn-plan to enter units manually") | no | NEW (stub) |
+| `/learn-dashboard [start\|stop\|status\|open]` | local web UI over `~/.pi/learn/` — read + inline-edit Track fields | no | NEW |
+| `/learn-glossary [list\|add\|update\|remove\|scan]` | track glossary — manual entries + scan from unit-guide markdown | no | NEW |
 
 ## Web-tool surface (LLM-callable tools)
 

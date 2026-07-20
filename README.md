@@ -25,6 +25,8 @@ The package holds one `Track` record per learning track in `~/.pi/learn/tracks/<
 | `/learn-status [track]` | Cross-track overview, or detail for one track. Flags stalled tracks. |
 | `/learn-web [status\|search\|fetch]` | Web tools status + direct (non-LLM) search/fetch. Registers `web_search` + `web_fetch` for the agent **unless** another extension already provides them — see [Web tools](#web-tools). |
 | `/learn-migrate [path]` | One-shot migration from the `socrates-*` proto state to Track records. |
+| `/learn-dashboard [start\|stop\|status\|open] [port]` | Local web dashboard — view and edit tracks at `127.0.0.1`. Polls `~/.pi/learn/` every few seconds. |
+| `/learn-glossary [list\|add\|update\|remove\|scan] [track]` | Track-wide glossary of technical terms from course docs. Scan extracts terms from unit-guide markdown. |
 
 ### Agent-callable tools
 
@@ -76,7 +78,7 @@ State lives in `~/.pi/learn/` (hybrid storage — track metadata is centralized;
 
 | Path | Purpose |
 |------|---------|
-| `~/.pi/learn/tracks/<id>.json` | **The Track record** — single source of truth (edge, next_action, compass, process contract, yaks, material graph, log) |
+| `~/.pi/learn/tracks/<id>.json` | **The Track record** — single source of truth (edge, next_action, compass, process contract, yaks, material graph, glossary, log) |
 | `~/.pi/learn/index.json` | Active track id + summary of all tracks |
 | `~/.pi/learn/timer/state.json` | Running timer state (restored on next session) |
 | `~/.pi/learn/timer/log.jsonl` | One JSON per completed/interrupted focus session |
@@ -114,6 +116,10 @@ The package never writes learning-state files into your project repo. The projec
 /learn-plan                                 # accept / revise the suggested edge, set next action
 /learn-start
 /learn-reflect                              # walk the rubric (your verify) + update edge + next action
+
+# Dashboard (optional — visual track browser + inline edits):
+/learn-dashboard start               # open http://127.0.0.1:7331 (or next free port)
+/learn-glossary scan                 # seed glossary from unit-guide markdown
 ```
 
 The wizard's suggested edge is **not** auto-accepted — `/learn-plan` surfaces it for you to own. That keeps the forethought step yours while removing the cold-start blank page. Study tracks work the same way, except `/learn-reflect` scores a rubric instead of asking a yes/no "did you cross the edge?" — the rubric is the non-coding analog of `cargo test`.
@@ -122,7 +128,7 @@ The wizard's suggested edge is **not** auto-accepted — `/learn-plan` surfaces 
 
 - [x] Research pass + design (`research.md`, `DESIGN.md`)
 - [x] Literature verification (2026-07-13) — every verdict checked against current research via live web search; 3 refinements recorded in `research.md`. The 2026 McLeod/Miller-Felton/Kim chapter on AI support for ADHD + SRL is a near-direct precedent.
-- [x] v1: persistence layer, `/learn-start`, `/learn-timer`, `/learn-scaffold` (recipe + generic wizard), `/learn-study` (study-track scaffolder + rubric), `/learn-cue`, `/learn-yaks`, `/learn-reflect` (with folded rubric for study tracks), `/learn-plan`, `/learn-status`, `/learn-migrate`, `/learn-web` + `web_search` + `web_fetch` (with deferral to `pi-web-access` when installed)
+- [x] v1: persistence layer, `/learn-start`, `/learn-timer`, `/learn-scaffold` (recipe + generic wizard), `/learn-study` (study-track scaffolder + rubric), `/learn-cue`, `/learn-yaks`, `/learn-reflect` (with folded rubric for study tracks), `/learn-plan`, `/learn-status`, `/learn-migrate`, `/learn-web` + `web_search` + `web_fetch` (with deferral to `pi-web-access` when installed), `/learn-dashboard` (writable local UI), `/learn-glossary` (track glossary + unit-guide scan)
 - [ ] `/learn-ingest` (v1.1) — RAG-grounded auto-decomposition of external material into learnable units, sequenced against the edge, iteratively revised by the reflection loop (per PathBuilder ACL 2026 + Hierarchical KG-Augmented LLM ACM 2026). Plus related cross-track interleaving (Brunmair & Richter 2019; Li et al. 2024).
 - [ ] Local install validation (`pi -e .` and `pi install .` end-to-end)
 - [ ] Published to npm as `@osguild/learn-pi`

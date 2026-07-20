@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { MaterialUnit } from "../types";
-import { Modal } from "./Modal";
-import { MaterialGraphEditor } from "./MaterialGraphEditor";
+import { patchTrack } from "../api";
+import { InlineAdd } from "./Editable";
+import { MaterialUnitCard } from "./MaterialUnitCard";
 
 interface Props {
   trackId: string;
@@ -9,74 +10,61 @@ interface Props {
   onTrackChanged: () => void;
 }
 
-const STATUS_LABEL: Record<MaterialUnit["status"], string> = {
-  pending: "pending",
-  active: "active",
-  done: "done",
-  skipped: "skipped",
-};
-
-// Material graph card. The card itself is a launcher: clicking it (or the
-// "edit" affordance) opens a modal with the full per-unit editor. The inline
-// status/difficulty dropdowns that used to live here moved into the modal so
-// the card stays a compact summary.
 export function MaterialGraph({ trackId, track, onTrackChanged }: Props) {
-  const [open, setOpen] = useState(false);
   const mg = track.material_graph;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const counts = countByStatus(mg.units);
-  const summary = (
-    <span className="mg-summary">
-      {mg.units.length} unit{mg.units.length === 1 ? "" : "s"}
-      {counts.active > 0 && <span className="mg-count active">· {counts.active} active</span>}
-      {counts.done > 0 && <span className="mg-count done">· {counts.done} done</span>}
-      {counts.pending > 0 && <span className="mg-count pending">· {counts.pending} pending</span>}
-      {counts.skipped > 0 && <span className="mg-count skipped">· {counts.skipped} skipped</span>}
-    </span>
-  );
+
+  const addUnit = async (title: string) => {
+    setErr(null);
+    setBusy(true);
+    try {
+      await patchTrack(trackId, { add_unit: { title } });
+      onTrackChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <>
-      <div className="card material material-launcher" onClick={() => setOpen(true)} role="button" tabIndex={0}>
-        <div className="card-title">
-          material graph
-          {mg.source && <span className="dim"> · source: {mg.source}</span>}
-        </div>
-        {mg.units.length === 0 ? (
-          <div className="dim small">(no units — click to add one)</div>
-        ) : (
-          <>
-            <div className="mg-summary-row">{summary}</div>
-            <ul className="mg-preview">
-              {mg.units.slice(0, 4).map((u) => (
-                <li key={u.id} className={`mg-preview-unit unit-${u.status}`}>
-                  <span className={`status-pill status-${u.status}`}>{STATUS_LABEL[u.status]}</span>
-                  <span className="mg-preview-title">{u.title}</span>
-                </li>
-              ))}
-              {mg.units.length > 4 && (
-                <li className="dim small mg-preview-more">+ {mg.units.length - 4} more…</li>
-              )}
-            </ul>
-          </>
+    <div className="material-graph-section">
+      <div className="material-graph-header">
+        <span className="material-graph-title">material units</span>
+        {mg.units.length > 0 && (
+          <span className="dim small mg-summary">
+            {mg.units.length} unit{mg.units.length === 1 ? "" : "s"}
+            {counts.active > 0 && <span className="mg-count active"> · {counts.active} active</span>}
+            {counts.done > 0 && <span className="mg-count done"> · {counts.done} done</span>}
+            {counts.pending > 0 && <span className="mg-count pending"> · {counts.pending} pending</span>}
+            {counts.skipped > 0 && <span className="mg-count skipped"> · {counts.skipped} skipped</span>}
+          </span>
         )}
-        <div className="mg-open-hint dim small">click to edit →</div>
+        {mg.source && (
+          <span className="dim small">
+            · source: <span className="mono">{mg.source}</span>
+          </span>
+        )}
       </div>
 
-      {open && (
-        <Modal
-          title="Material graph"
-          subtitle={`${mg.units.length} unit${mg.units.length === 1 ? "" : "s"}${mg.source ? ` · source: ${mg.source}` : ""}`}
-          onClose={() => setOpen(false)}
-        >
-          <MaterialGraphEditor
-            trackId={trackId}
-            units={mg.units}
-            source={mg.source}
-            onTrackChanged={onTrackChanged}
-          />
-        </Modal>
+      <div className="unit-cards-grid">
+        {mg.units.map((u) => (
+          <MaterialUnitCard key={u.id} trackId={trackId} unit={u} onTrackChanged={onTrackChanged} />
+        ))}
+        <div className={`card unit-add-card${busy ? " busy" : ""}`}>
+          <div className="card-title">add unit</div>
+          <InlineAdd label="new unit" placeholder="unit title" onAdd={addUnit} />
+        </div>
+      </div>
+
+      {mg.units.length === 0 && !busy && (
+        <div className="dim small material-graph-empty">No units yet — add one above or run /learn-plan /learn-scaffold.</div>
       )}
-    </>
+
+      {err && <div className="edit-error material-graph-error">{err}</div>}
+    </div>
   );
 }
 

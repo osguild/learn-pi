@@ -26,6 +26,7 @@ import learnStudy from "./learn-study";
 import learnCue from "./learn-cue";
 import learnYaks from "./learn-yaks";
 import learnResources from "./learn-resources";
+import learnGlossary from "./learn-glossary";
 import learnStatus from "./learn-status";
 import learnMigrate from "./learn-migrate";
 import learnWeb from "./learn-web";
@@ -47,6 +48,7 @@ export default function learnPi(pi: ExtensionAPI) {
 	learnCue(pi);
 	learnYaks(pi);
 	learnResources(pi);
+	learnGlossary(pi);
 	learnStatus(pi);
 	learnMigrate(pi);
 	learnWeb(pi);
