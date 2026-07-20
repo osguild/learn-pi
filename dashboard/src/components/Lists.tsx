@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Resource, ResourceKind, Yak } from "../types";
 import { patchTrack } from "../api";
 import { InlineAdd } from "./Editable";
-import { ResourceLink } from "./ResourceLink";
+import { ResourcesTable } from "./ResourcesTable";
 
 const RESOURCE_KINDS: ResourceKind[] = ["article", "doc", "video", "book", "paper", "repo", "other"];
 
@@ -25,19 +25,7 @@ export function ResourcesList({ trackId, resources, onTrackChanged }: ListProps 
   return (
     <div className="card resources">
       <div className="card-title">track resources</div>
-      {resources.length > 0 ? (
-        <ul className="res-list">
-          {resources.map((r) => (
-            <li key={r.id}>
-              <ResourceLink trackId={trackId} resource={r} />
-              {r.kind && <span className="dim small"> · {r.kind}</span>}
-              {r.note && <div className="dim small">{r.note}</div>}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="dim small">(no track-level resources yet)</div>
-      )}
+      <ResourcesTable trackId={trackId} resources={resources} />
       <div className="res-add">
         <select
           className="res-kind-select"
