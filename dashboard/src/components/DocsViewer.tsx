@@ -23,7 +23,16 @@ export function DocsViewer({ slug, onBack }: Props) {
         if (!cancelled) setDoc(d);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes("Unknown route /api/docs")) {
+            setError(
+              "Dashboard server is outdated. Restart pi, then run /learn-dashboard stop && /learn-dashboard start.",
+            );
+          } else {
+            setError(msg);
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

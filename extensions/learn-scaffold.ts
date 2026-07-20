@@ -42,6 +42,7 @@ import {
 	type Depth,
 } from "../lib/scaffold";
 import { freshTrack, saveTrack, trackExists, type Track } from "../lib/track";
+import { collectTrackOverview } from "../lib/track-overview";
 import { slugify, normalizeGoal } from "../lib/paths";
 import { webSearch } from "../lib/web";
 
@@ -85,6 +86,10 @@ async function runRecipe(tokens: string[], ctx: ExtensionCommandContext, pi: Ext
 	}
 
 	const vars = await resolveVariablesWithPrompts(manifest, ctx);
+	const overview = await collectTrackOverview(ctx, {
+		goal: substitute(manifest.label, vars),
+		stack: [substitute(manifest.label, vars)],
+	});
 	const trackId = manifest.track_id ?? slugify(manifest.label);
 	if (await trackExists(trackId)) {
 		const ok = await ctx.ui.confirm(
@@ -121,6 +126,7 @@ async function runRecipe(tokens: string[], ctx: ExtensionCommandContext, pi: Ext
 		id: trackId,
 		label: substitute(manifest.label, vars),
 		outcome_compass: substitute(manifest.outcome_compass_template, vars),
+		overview,
 		work_dir: targetDir,
 		verify_command: substitute(manifest.verify_command, vars),
 		process_contract: {
@@ -250,6 +256,12 @@ async function runGeneric(tokens: string[], ctx: ExtensionCommandContext, pi: Ex
 		if (entered && entered.trim()) framework = entered.trim();
 	}
 
+	const overview = await collectTrackOverview(ctx, {
+		goal,
+		depth,
+		stack: framework ? [language, framework] : [language],
+	});
+
 	// 5. Target dir + session length
 	const defaultDir = slugify(goal);
 	const dirArg = inlineDir || (await ctx.ui.input("Target directory:", `~/gitrepos/${defaultDir}`));
@@ -302,6 +314,7 @@ async function runGeneric(tokens: string[], ctx: ExtensionCommandContext, pi: Ex
 		id: trackId,
 		label: goal,
 		outcome_compass: compass,
+		overview,
 		work_dir: targetDir,
 		verify_command: skel.verifyCommand(sctx),
 		depth,

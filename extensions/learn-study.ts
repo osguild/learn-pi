@@ -55,6 +55,7 @@ import {
 	type NotesContext,
 } from "../lib/study-plan";
 import { freshTrack, saveTrack, trackExists, type StudyDepth } from "../lib/track";
+import { collectTrackOverview } from "../lib/track-overview";
 import { slugify, normalizeGoal } from "../lib/paths";
 import { webSearch } from "../lib/web";
 
@@ -104,6 +105,11 @@ async function run(args: string, ctx: ExtensionCommandContext, pi: ExtensionAPI)
 	if (!familyPick) { ctx.ui.notify("Wizard cancelled.", "warning"); return; }
 	const family = families.find((k) => familyPick.startsWith(APPROACHES[k].label))!;
 	const approach: Approach = APPROACHES[family];
+
+	const overview = await collectTrackOverview(ctx, {
+		goal,
+		depth,
+	});
 
 	// 4. Source — optional, capped single web-search round (scope-guarded).
 	let source: string | undefined;
@@ -180,6 +186,7 @@ async function run(args: string, ctx: ExtensionCommandContext, pi: ExtensionAPI)
 		id: trackId,
 		label: goal,
 		outcome_compass: compass,
+		overview,
 		work_dir: targetDir,
 		verify_command: null, // study tracks verify via the rubric in /learn-reflect, not a shell command
 		track_kind: "study",

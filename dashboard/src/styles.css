@@ -267,6 +267,29 @@ code, .mono {
   white-space: pre-wrap;
 }
 
+.card.overview {
+  grid-column: 1 / -1;
+}
+.overview-summary {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.overview-section {
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.overview-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;

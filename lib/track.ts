@@ -90,6 +90,24 @@ export interface MaterialGraph {
 	revised_at: string | null;
 }
 
+/**
+ * Track-level context captured at scaffold/plan time: learner background,
+ * learning approach, and a high-level lesson plan. Visibility only — not
+ * gated on progress (like outcome_compass).
+ */
+export interface TrackOverview {
+	/** One-paragraph abstract: what this track is and what success looks like. */
+	summary: string;
+	/** Learner background and gaps that affect pacing. */
+	learner_context?: string;
+	/** How sessions should feel (code-first, theory interleaved, …). */
+	approach?: string;
+	/** High-level sequenced plan — complements material_graph.units. */
+	learning_path?: string;
+	set_at: string;
+	revised_at?: string;
+}
+
 export interface SessionLogEntry {
 	id: string;
 	at: string;
@@ -134,6 +152,8 @@ export interface Track {
 	label: string;
 	outcome_compass: string;
 	outcome_compass_revised_at: string;
+	/** Learner context + high-level lesson plan (set at scaffold/plan time). */
+	overview?: TrackOverview | null;
 	process_contract: ProcessContract;
 	work_dir: string;
 	verify_command: string | null;
@@ -195,6 +215,7 @@ export function freshTrack(partial: Partial<Track> & Pick<Track, "id" | "label">
 	return {
 		outcome_compass: partial.outcome_compass ?? "",
 		outcome_compass_revised_at: partial.outcome_compass_revised_at ?? now,
+		overview: partial.overview ?? null,
 		process_contract: partial.process_contract ?? emptyProcessContract(),
 		work_dir: partial.work_dir ?? "",
 		verify_command: partial.verify_command ?? null,
@@ -434,4 +455,139 @@ export const STALL_THRESHOLD = 3;
  */
 export function trackKind(track: Track): TrackKind {
 	return track.track_kind ?? "programming";
+}
+
+// --- Field mutators (shared by CLI extensions and the dashboard API) --------
+//
+// These encapsulate the per-field integrity rules so `/learn-plan` and the
+// dashboard's `PATCH /api/tracks/:id` route cannot drift. Each returns a new
+// Track; callers persist via `saveTrack`. Pure (no I/O; `now` is passed in
+// so tests are deterministic).
+//
+// Rule reminder (from DESIGN.md):
+//   1. next_action is never empty for an active track.
+//   2. edge.statement and next_action update together in `applyReflection` —
+//      but a standalone edge edit (CLI or dashboard) is NOT a reflection; it
+//      resets `sessions_at_edge`, clears `edge_suggested`, and leaves
+//      `next_action` alone (the learner sets it separately).
+//   4. stall_counter is computed in `applyReflection`, never here.
+
+/** Optional hook: for study tracks, regenerate the rubric when the edge changes. */
+export type RubricRegenerator = (domainFamily: string, edge: string) => string[] | undefined;
+
+export function setEdge(
+	track: Track,
+	statement: string,
+	now: string,
+	regenerateRubric?: RubricRegenerator,
+): Track {
+	const trimmed = statement.trim();
+	if (!trimmed) throw new Error("edge statement must be non-empty");
+	let updated: Track = {
+		...track,
+		edge: { statement: trimmed, set_at: now, sessions_at_edge: 0 },
+		edge_suggested: false,
+	};
+	if (trackKind(track) === "study" && track.domain_family && regenerateRubric) {
+		const rubric = regenerateRubric(track.domain_family, trimmed);
+		if (rubric) updated = { ...updated, rubric };
+	}
+	return updated;
+}
+
+export function setNextAction(track: Track, action: string, now: string): Track {
+	const trimmed = action.trim();
+	if (track.status === "active" && !trimmed) {
+		throw new Error("next_action cannot be empty for an active track");
+	}
+	return { ...track, next_action: trimmed, next_action_set_at: now };
+}
+
+export function reviseCompass(track: Track, text: string, now: string): Track {
+	return { ...track, outcome_compass: text, outcome_compass_revised_at: now };
+}
+
+export function setVerifyCommand(track: Track, command: string | null): Track {
+	return { ...track, verify_command: command };
+}
+
+export function setSessionMin(track: Track, minutes: number): Track {
+	if (!Number.isFinite(minutes) || minutes <= 0) {
+		throw new Error(`session_min must be a positive number, got ${minutes}`);
+	}
+	return {
+		...track,
+		process_contract: { ...track.process_contract, session_min: Math.floor(minutes) },
+	};
+}
+
+export function setOverview(track: Track, overview: TrackOverview, now: string): Track {
+	const wasSet = Boolean(track.overview);
+	return {
+		...track,
+		overview: {
+			...overview,
+			set_at: track.overview?.set_at ?? overview.set_at ?? now,
+			revised_at: wasSet ? now : overview.revised_at,
+		},
+	};
+}
+
+export function addUnit(track: Track, title: string, now: string): Track {
+	const trimmed = title.trim();
+	if (!trimmed) throw new Error("unit title must be non-empty");
+	const unit = newUnit(trimmed);
+	return {
+		...track,
+		material_graph: {
+			...track.material_graph,
+			units: [...track.material_graph.units, unit],
+			revised_at: now,
+		},
+	};
+}
+
+export function updateUnit(
+	track: Track,
+	unitId: string,
+	patch: Partial<Pick<MaterialUnit, "title" | "status" | "difficulty" | "notes" | "prerequisites">>,
+	now: string,
+): Track {
+	let found = false;
+	const units = track.material_graph.units.map((u) => {
+		if (u.id !== unitId) return u;
+		found = true;
+		return { ...u, ...patch };
+	});
+	if (!found) throw new Error(`unit "${unitId}" not found`);
+	return {
+		...track,
+		material_graph: { ...track.material_graph, units, revised_at: now },
+	};
+}
+
+export function addResource(track: Track, title: string, url: string, kind?: ResourceKind): Track {
+	const t = title.trim();
+	const u = url.trim();
+	if (!t || !u) throw new Error("resource title and url are required");
+	const resource = newResource(t, u, kind);
+	return { ...track, resources: [...track.resources, resource] };
+}
+
+export function addYak(track: Track, desc: string): Track {
+	const d = desc.trim();
+	if (!d) throw new Error("yak description must be non-empty");
+	const yak = newYak(d);
+	return { ...track, deferred_yaks: [...track.deferred_yaks, yak] };
+}
+
+export function resolveYak(track: Track, yakId: string): Track {
+	let found = false;
+	const deferred_yaks = track.deferred_yaks.map((y) => {
+		if (y.id !== yakId) return y;
+		found = true;
+		return { ...y, resolved: true };
+	});
+	if (!found) throw new Error(`yak "${yakId}" not found`);
+	return { ...track, deferred_yaks };
 }

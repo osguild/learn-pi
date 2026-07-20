@@ -18,6 +18,8 @@
  *   /learn-plan session [track] <min>       Set session length (minutes)
  *   /learn-plan unit [track] add <title>    Add a material unit (manual ingestion)
  *   /learn-plan unit [track] list           List material units
+ *   /learn-plan overview [track]            Show track overview (context + lesson plan)
+ *   /learn-plan overview edit [track]         Revise track overview via prompts
  *
  * If [track] is omitted, uses the active track.
  */
@@ -33,6 +35,7 @@ import {
 	type Track,
 } from "../lib/track";
 import { buildRubric } from "../lib/study-plan";
+import { collectTrackOverview, formatTrackOverview } from "../lib/track-overview";
 
 export default function learnPlan(pi: ExtensionAPI) {
 	void pi;
@@ -47,6 +50,12 @@ export default function learnPlan(pi: ExtensionAPI) {
 async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
 	const sub = tokens[0] ?? "show";
+
+	// /learn-plan <track> — show plan when the first token is a track id, not a subcommand.
+	if (sub !== "show" && (await trackExists(sub))) {
+		await cmdShow(sub, ctx);
+		return;
+	}
 
 	if (sub === "show") {
 		await cmdShow(tokens[1], ctx);
@@ -112,6 +121,10 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		await cmdUnit(tokens.slice(1), ctx);
 		return;
 	}
+	if (sub === "overview") {
+		await cmdOverview(tokens.slice(1), ctx);
+		return;
+	}
 	if (sub === "ingest") {
 		ctx.ui.notify(
 			"/learn-ingest (auto material decomposition) is a v1.1 feature. For now, add units manually: /learn-plan unit add <title>.",
@@ -119,7 +132,39 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		);
 		return;
 	}
-	ctx.ui.notify(`Unknown subcommand "${sub}". Try: show, edge, next, compass, verify, session, unit, ingest`, "warning");
+	ctx.ui.notify(`Unknown subcommand "${sub}". Try: show, edge, next, compass, verify, session, unit, overview, ingest`, "warning");
+}
+
+async function cmdOverview(tokens: string[], ctx: ExtensionCommandContext): Promise<void> {
+	const edit = tokens[0] === "edit";
+	const trackTokens = edit ? tokens.slice(1) : tokens;
+	let trackArg: string | undefined;
+	if (trackTokens[0] && await trackExists(trackTokens[0])) {
+		trackArg = trackTokens[0];
+	}
+	const track = await resolveTrack(trackArg, ctx);
+	if (!track) return;
+
+	if (edit) {
+		const overview = await collectTrackOverview(
+			ctx,
+			{
+				goal: track.label,
+				depth: track.depth ?? track.study_depth,
+				stack: track.recommended_stack,
+			},
+			track.overview,
+		);
+		await saveTrack({ ...track, overview });
+		ctx.ui.notify("Track overview updated.", "info");
+		return;
+	}
+
+	if (!track.overview) {
+		ctx.ui.notify("No overview set. Run /learn-plan overview edit [track]", "info");
+		return;
+	}
+	ctx.ui.notify(formatTrackOverview(track.overview).join("\n"), "info");
 }
 
 async function cmdShow(trackArg: string | undefined, ctx: ExtensionCommandContext): Promise<void> {
@@ -146,6 +191,11 @@ async function cmdShow(trackArg: string | undefined, ctx: ExtensionCommandContex
 	);
 	if (isStudy && track.rubric?.length) {
 		lines.push(`rubric:  ${track.rubric.length} questions (answered in /learn-reflect)`);
+	}
+	if (track.overview) {
+		lines.push(...formatTrackOverview(track.overview));
+	} else {
+		lines.push("overview: (unset — /learn-plan overview edit)");
 	}
 	ctx.ui.notify(lines.join("\n"), "info");
 }

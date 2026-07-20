@@ -62,6 +62,14 @@ export function renderHomeBody(theme: Theme, track: Track, width: number): strin
 		lines.push(theme.fg("dim", `  ${l}`));
 	}
 
+	if (track.overview?.summary) {
+		lines.push("");
+		lines.push(theme.fg("dim", theme.bold("OVERVIEW")));
+		for (const l of wrapWords(track.overview.summary, inner)) {
+			lines.push(theme.fg("dim", `  ${l}`));
+		}
+	}
+
 	lines.push("");
 	const isStudy = (track.track_kind ?? "programming") === "study";
 	const verify = isStudy

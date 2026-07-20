@@ -64,6 +64,15 @@ export interface MaterialGraph {
   revised_at: string | null;
 }
 
+export interface TrackOverview {
+  summary: string;
+  learner_context?: string;
+  approach?: string;
+  learning_path?: string;
+  set_at: string;
+  revised_at?: string;
+}
+
 export interface SessionLogEntry {
   id: string;
   at: string;
@@ -87,6 +96,7 @@ export interface Track {
   label: string;
   outcome_compass: string;
   outcome_compass_revised_at: string;
+  overview?: TrackOverview | null;
   process_contract: ProcessContract;
   work_dir: string;
   verify_command: string | null;

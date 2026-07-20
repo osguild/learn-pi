@@ -1,6 +1,6 @@
 import type { Track, TrackIndex } from "../types";
 import { formatRelative } from "../api";
-import { CompassCard, EdgeCard, NextActionCard, ProcessContractCard, StallBadge } from "./Cards";
+import { CompassCard, EdgeCard, NextActionCard, OverviewCard, ProcessContractCard, StallBadge } from "./Cards";
 import { MaterialGraph } from "./MaterialGraph";
 import { ResourcesList, YaksList } from "./Lists";
 import { SessionLog } from "./SessionLog";
@@ -36,6 +36,7 @@ export function TrackDetail({ track, index }: Props) {
       </header>
 
       <div className="grid">
+        <OverviewCard track={track} />
         <CompassCard track={track} />
         <EdgeCard track={track} />
         <NextActionCard track={track} />

@@ -40,6 +40,46 @@ export function CompassCard({ track }: { track: Track }) {
   );
 }
 
+export function OverviewCard({ track }: { track: Track }) {
+  const overview = track.overview;
+  if (!overview) {
+    return (
+      <div className="card overview">
+        <div className="card-title">track overview</div>
+        <div className="dim">(unset — set at scaffold time or run /learn-plan overview edit)</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card overview">
+      <div className="card-title">track overview</div>
+      <p className="overview-summary">{overview.summary}</p>
+      {overview.learner_context && (
+        <div className="overview-section">
+          <div className="overview-label">background</div>
+          <div>{overview.learner_context}</div>
+        </div>
+      )}
+      {overview.approach && (
+        <div className="overview-section">
+          <div className="overview-label">approach</div>
+          <div>{overview.approach}</div>
+        </div>
+      )}
+      {overview.learning_path && (
+        <div className="overview-section">
+          <div className="overview-label">learning path</div>
+          <div>{overview.learning_path}</div>
+        </div>
+      )}
+      <div className="meta">
+        <span>set {formatRelative(overview.set_at)}</span>
+        {overview.revised_at && <span>· revised {formatRelative(overview.revised_at)}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function ProcessContractCard({ track }: { track: Track }) {
   const pc = track.process_contract;
   const cue = pc.cue;
