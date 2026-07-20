@@ -1,6 +1,7 @@
 import type { Track, TrackIndex } from "../types";
 import { formatRelative } from "../api";
-import { CompassCard, EdgeCard, NextActionCard, OverviewCard, ProcessContractCard, StallBadge } from "./Cards";
+import { CompassCard, OverviewCard, ProcessContractCard } from "./Cards";
+import { HeroPanel } from "./HeroPanel";
 import { MaterialGraph } from "./MaterialGraph";
 import { ResourcesList, YaksList } from "./Lists";
 import { SessionLog } from "./SessionLog";
@@ -8,21 +9,30 @@ import { SessionLog } from "./SessionLog";
 interface Props {
   track: Track;
   index: TrackIndex;
+  onTrackChanged: () => void;
 }
 
-export function TrackDetail({ track, index }: Props) {
+export function TrackDetail({ track, index, onTrackChanged }: Props) {
   const isActive = track.id === index.active_track_id;
   const isStudy = (track.track_kind ?? "programming") === "study";
+  const stalled = track.stall_counter >= 3;
   return (
     <div className="detail">
       <header className="detail-header">
-        <h2>
-          {isActive && <span className="mark">▶</span>} {track.label}
-          <span className="dim small"> · {track.id}</span>
-        </h2>
-        <div className="meta">
-          <span className={`status status-${track.status}`}>{track.status}</span>
-          <span>{isStudy ? "study" : "programming"}</span>
+        <div className="dh-row">
+          <h2>
+            {isActive && <span className="mark">▶</span>} {track.label}
+          </h2>
+          <span className={`status-pill status-${track.status}`}>{track.status}</span>
+          <span className={`dh-kind${isStudy ? " study" : ""}`}>{isStudy ? "study" : "programming"}</span>
+          {stalled && (
+            <span className="stall-pill" title="double-loop: is the goal wrong?">
+              stall: {track.stall_counter}
+            </span>
+          )}
+        </div>
+        <div className="dh-meta dim small">
+          <span className="mono">{track.id}</span>
           {isStudy && track.study_depth && <span>· {track.study_depth}</span>}
           {isStudy && track.domain_family && <span>· {track.domain_family}</span>}
           {!isStudy && track.depth && <span>· {track.depth}</span>}
@@ -32,20 +42,38 @@ export function TrackDetail({ track, index }: Props) {
           <span>· created {formatRelative(track.created_at)}</span>
           <span>· last session {formatRelative(track.last_session_at)}</span>
         </div>
-        <StallBadge track={track} />
       </header>
 
-      <div className="grid">
-        <OverviewCard track={track} />
-        <CompassCard track={track} />
-        <EdgeCard track={track} />
-        <NextActionCard track={track} />
-        <ProcessContractCard track={track} />
-        <MaterialGraph trackId={track.id} track={track} />
-        <ResourcesList trackId={track.id} resources={track.resources} />
-        <YaksList yaks={track.deferred_yaks} />
+      <HeroPanel track={track} onTrackChanged={onTrackChanged} />
+
+      <section className="section">
+        <h3 className="section-title">Forethought</h3>
+        <div className="section-grid">
+          <CompassCard track={track} onTrackChanged={onTrackChanged} />
+          <OverviewCard track={track} onTrackChanged={onTrackChanged} />
+        </div>
+      </section>
+
+      <section className="section">
+        <h3 className="section-title">Process</h3>
+        <div className="section-grid">
+          <ProcessContractCard track={track} onTrackChanged={onTrackChanged} />
+        </div>
+      </section>
+
+      <section className="section">
+        <h3 className="section-title">Materials</h3>
+        <div className="section-grid materials-grid">
+          <MaterialGraph trackId={track.id} track={track} onTrackChanged={onTrackChanged} />
+          <ResourcesList trackId={track.id} resources={track.resources} onTrackChanged={onTrackChanged} />
+          <YaksList trackId={track.id} yaks={track.deferred_yaks} onTrackChanged={onTrackChanged} />
+        </div>
+      </section>
+
+      <section className="section">
+        <h3 className="section-title">History</h3>
         <SessionLog entries={track.log} />
-      </div>
+      </section>
     </div>
   );
 }

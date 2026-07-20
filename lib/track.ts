@@ -22,6 +22,7 @@ import {
 	TRACKS_DIR,
 	trackFile,
 } from "./paths";
+import { buildRubric } from "./study-plan";
 
 // --- Types ------------------------------------------------------------------
 
@@ -483,14 +484,19 @@ export function setEdge(
 ): Track {
 	const trimmed = statement.trim();
 	if (!trimmed) throw new Error("edge statement must be non-empty");
-	let updated: Track = {
+	const updated: Track = {
 		...track,
 		edge: { statement: trimmed, set_at: now, sessions_at_edge: 0 },
 		edge_suggested: false,
 	};
-	if (trackKind(track) === "study" && track.domain_family && regenerateRubric) {
-		const rubric = regenerateRubric(track.domain_family, trimmed);
-		if (rubric) updated = { ...updated, rubric };
+	// Study tracks: regenerate the rubric for the new edge (the rubric is the
+	// study-track analog of verify_command — it must track the edge). Callers
+	// may override the regenerator (e.g. tests); default is `buildRubric`.
+	if (trackKind(track) === "study" && track.domain_family) {
+		const rubric = regenerateRubric
+			? regenerateRubric(track.domain_family, trimmed)
+			: buildRubric(track.domain_family, trimmed);
+		if (rubric) return { ...updated, rubric };
 	}
 	return updated;
 }

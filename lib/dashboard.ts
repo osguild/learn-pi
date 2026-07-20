@@ -25,12 +25,28 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
+	addResource,
+	addUnit,
+	addYak,
 	loadIndex,
 	loadTrack,
+	loadTrackOrThrow,
 	listTrackIds,
+	reviseCompass,
+	resolveYak,
+	saveTrack,
+	setEdge,
+	setNextAction,
+	setOverview,
+	setSessionMin,
+	setVerifyCommand,
+	updateUnit,
+	type MaterialUnit,
+	type ResourceKind,
+	type SessionLogEntry,
 	type Track,
 	type TrackIndex,
-	type SessionLogEntry,
+	type TrackOverview,
 } from "./track";
 import { LEARN_ROOT, SESSIONS_LOG } from "./paths";
 import { readMarkdownForTrack } from "./markdown-serve";
@@ -164,7 +180,7 @@ async function handle(
 
 	try {
 		if (pathname.startsWith("/api/")) {
-			await apiRoute(pathname, url.searchParams, res);
+			await apiRoute(req, pathname, url.searchParams, res);
 			return;
 		}
 		await staticRoute(pathname, res, staticDir);
@@ -177,6 +193,7 @@ async function handle(
 // --- API --------------------------------------------------------------------
 
 async function apiRoute(
+	req: IncomingMessage,
 	pathname: string,
 	searchParams: URLSearchParams,
 	res: ServerResponse,
@@ -199,6 +216,10 @@ async function apiRoute(
 	const trackMatch = pathname.match(/^\/api\/tracks\/([^/]+)$/);
 	if (trackMatch) {
 		const id = decodeURIComponent(trackMatch[1]);
+		if (req.method === "PATCH") {
+			await handlePatchTrack(id, req, res);
+			return;
+		}
 		const t = await loadTrack(id);
 		if (!t) {
 			sendJson(res, 404, { error: `Track "${id}" not found` });
@@ -256,6 +277,281 @@ async function apiRoute(
 		return;
 	}
 	sendJson(res, 404, { error: `Unknown route ${pathname}` });
+}
+
+// --- PATCH /api/tracks/:id (writable dashboard) -----------------------------
+//
+// Generic patch endpoint for the dashboard. Body is a partial Track for
+// scalar fields plus explicit op keys for collections. Only fields on the
+// editable allowlist are honored; everything else is rejected with 400 so
+// the dashboard can't accidentally (or be tricked into) writing computed
+// fields like `log`, `stall_counter`, `id`, or `created_at`.
+//
+// All field updates go through the mutators in lib/track.ts, which are the
+// single source of truth for per-field integrity rules — same path the CLI
+// uses. We only persist via saveTrack (atomic tmp+rename), so a validation
+// failure leaves the on-disk record untouched.
+
+const MAX_PATCH_BODY_BYTES = 64 * 1024;
+
+type UnitPatch = Partial<Pick<MaterialUnit, "title" | "status" | "difficulty" | "notes" | "prerequisites">>;
+
+interface PatchTrackBody {
+	// Scalar field replacements.
+	edge?: { statement: string };
+	next_action?: string;
+	outcome_compass?: string;
+	verify_command?: string | null;
+	session_min?: number;
+	overview?: TrackOverview;
+	// Collection operations (applied in this order).
+	add_unit?: { title: string };
+	update_unit?: { id: string; patch: UnitPatch };
+	add_resource?: { title: string; url: string; kind?: ResourceKind };
+	add_yak?: { desc: string };
+	resolve_yak?: { id: string };
+}
+
+const RESOURCE_KINDS: readonly ResourceKind[] = ["article", "doc", "video", "book", "paper", "repo", "other"];
+const UNIT_STATUSES: readonly MaterialUnit["status"][] = ["pending", "active", "done", "skipped"];
+const UNIT_DIFFICULTIES: readonly MaterialUnit["difficulty"][] = ["easy", "medium", "hard"];
+
+async function readBody(req: IncomingMessage, limitBytes: number): Promise<string> {
+	const chunks: Buffer[] = [];
+	let total = 0;
+	for await (const chunk of req) {
+		total += chunk.length;
+		if (total > limitBytes) {
+			throw new Error(`request body exceeds ${limitBytes} bytes`);
+		}
+		chunks.push(chunk as Buffer);
+	}
+	return Buffer.concat(chunks).toString("utf8");
+}
+
+function isString(v: unknown): v is string {
+	return typeof v === "string";
+}
+function isStringOrNull(v: unknown): v is string | null {
+	return v === null || typeof v === "string";
+}
+function isNumber(v: unknown): v is number {
+	return typeof v === "number" && Number.isFinite(v);
+}
+function isStringArray(v: unknown): v is string[] {
+	return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+/** Validate the parsed body. Returns the coerced PatchTrackBody or throws. */
+function validatePatchBody(raw: unknown): PatchTrackBody {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		throw new Error("PATCH body must be a JSON object");
+	}
+	const obj = raw as Record<string, unknown>;
+	const out: PatchTrackBody = {};
+	const known = new Set([
+		"edge", "next_action", "outcome_compass", "verify_command", "session_min", "overview",
+		"add_unit", "update_unit", "add_resource", "add_yak", "resolve_yak",
+	]);
+	for (const key of Object.keys(obj)) {
+		if (!known.has(key)) {
+			throw new Error(`unknown field "${key}"; allowed: ${[...known].join(", ")}`);
+		}
+	}
+	if ("edge" in obj) {
+		const e = obj.edge;
+		if (typeof e !== "object" || e === null || !isString((e as Record<string, unknown>).statement)) {
+			throw new Error("edge must be { statement: string }");
+		}
+		out.edge = { statement: (e as { statement: string }).statement };
+	}
+	if ("next_action" in obj) {
+		if (!isString(obj.next_action)) throw new Error("next_action must be a string");
+		out.next_action = obj.next_action;
+	}
+	if ("outcome_compass" in obj) {
+		if (!isString(obj.outcome_compass)) throw new Error("outcome_compass must be a string");
+		out.outcome_compass = obj.outcome_compass;
+	}
+	if ("verify_command" in obj) {
+		if (!isStringOrNull(obj.verify_command)) throw new Error("verify_command must be a string or null");
+		out.verify_command = obj.verify_command;
+	}
+	if ("session_min" in obj) {
+		if (!isNumber(obj.session_min) || obj.session_min <= 0) {
+			throw new Error("session_min must be a positive number");
+		}
+		out.session_min = obj.session_min;
+	}
+	if ("overview" in obj) {
+		const o = obj.overview;
+		if (typeof o !== "object" || o === null || Array.isArray(o)) {
+			throw new Error("overview must be an object");
+		}
+		const ov = o as Record<string, unknown>;
+		if (!isString(ov.summary)) throw new Error("overview.summary must be a string");
+		if (ov.learner_context !== undefined && !isString(ov.learner_context)) {
+			throw new Error("overview.learner_context must be a string");
+		}
+		if (ov.approach !== undefined && !isString(ov.approach)) {
+			throw new Error("overview.approach must be a string");
+		}
+		if (ov.learning_path !== undefined && !isString(ov.learning_path)) {
+			throw new Error("overview.learning_path must be a string");
+		}
+		if (ov.set_at !== undefined && !isString(ov.set_at)) {
+			throw new Error("overview.set_at must be a string");
+		}
+		if (ov.revised_at !== undefined && !isString(ov.revised_at)) {
+			throw new Error("overview.revised_at must be a string");
+		}
+		const overview: TrackOverview = {
+			summary: ov.summary,
+			// setOverview prefers the existing track's set_at; this is just a
+			// required placeholder for the TrackOverview type when the client omits it.
+			set_at: isString(ov.set_at) ? ov.set_at : new Date().toISOString(),
+		};
+		if (isString(ov.learner_context)) overview.learner_context = ov.learner_context;
+		if (isString(ov.approach)) overview.approach = ov.approach;
+		if (isString(ov.learning_path)) overview.learning_path = ov.learning_path;
+		if (isString(ov.revised_at)) overview.revised_at = ov.revised_at;
+		out.overview = overview;
+	}
+	if ("add_unit" in obj) {
+		const a = obj.add_unit;
+		if (typeof a !== "object" || a === null || !isString((a as Record<string, unknown>).title)) {
+			throw new Error("add_unit must be { title: string }");
+		}
+		out.add_unit = { title: (a as { title: string }).title };
+	}
+	if ("update_unit" in obj) {
+		const u = obj.update_unit;
+		if (typeof u !== "object" || u === null || !isString((u as Record<string, unknown>).id)) {
+			throw new Error("update_unit must be { id: string, patch: ... }");
+		}
+		const ur = u as Record<string, unknown>;
+		const patchRaw = ur.patch;
+		if (typeof patchRaw !== "object" || patchRaw === null || Array.isArray(patchRaw)) {
+			throw new Error("update_unit.patch must be an object");
+		}
+		const p = patchRaw as Record<string, unknown>;
+		const patch: UnitPatch = {};
+		if (p.title !== undefined) {
+			if (!isString(p.title)) throw new Error("update_unit.patch.title must be a string");
+			patch.title = p.title;
+		}
+		if (p.status !== undefined) {
+			if (!isString(p.status) || !UNIT_STATUSES.includes(p.status as MaterialUnit["status"])) {
+				throw new Error(`update_unit.patch.status must be one of ${UNIT_STATUSES.join(", ")}`);
+			}
+			patch.status = p.status as MaterialUnit["status"];
+		}
+		if (p.difficulty !== undefined) {
+			if (!isString(p.difficulty) || !UNIT_DIFFICULTIES.includes(p.difficulty as MaterialUnit["difficulty"])) {
+				throw new Error(`update_unit.patch.difficulty must be one of ${UNIT_DIFFICULTIES.join(", ")}`);
+			}
+			patch.difficulty = p.difficulty as MaterialUnit["difficulty"];
+		}
+		if (p.notes !== undefined) {
+			if (!isString(p.notes)) throw new Error("update_unit.patch.notes must be a string");
+			patch.notes = p.notes;
+		}
+		if (p.prerequisites !== undefined) {
+			if (!isStringArray(p.prerequisites)) throw new Error("update_unit.patch.prerequisites must be a string[]");
+			patch.prerequisites = p.prerequisites;
+		}
+		out.update_unit = { id: ur.id as string, patch };
+	}
+	if ("add_resource" in obj) {
+		const a = obj.add_resource;
+		if (typeof a !== "object" || a === null) throw new Error("add_resource must be an object");
+		const ar = a as Record<string, unknown>;
+		if (!isString(ar.title) || !isString(ar.url)) {
+			throw new Error("add_resource must be { title: string, url: string, kind? }");
+		}
+		if (ar.kind !== undefined && (!isString(ar.kind) || !RESOURCE_KINDS.includes(ar.kind as ResourceKind))) {
+			throw new Error(`add_resource.kind must be one of ${RESOURCE_KINDS.join(", ")}`);
+		}
+		out.add_resource = {
+			title: ar.title,
+			url: ar.url,
+			kind: ar.kind as ResourceKind | undefined,
+		};
+	}
+	if ("add_yak" in obj) {
+		const a = obj.add_yak;
+		if (typeof a !== "object" || a === null || !isString((a as Record<string, unknown>).desc)) {
+			throw new Error("add_yak must be { desc: string }");
+		}
+		out.add_yak = { desc: (a as { desc: string }).desc };
+	}
+	if ("resolve_yak" in obj) {
+		const r = obj.resolve_yak;
+		if (typeof r !== "object" || r === null || !isString((r as Record<string, unknown>).id)) {
+			throw new Error("resolve_yak must be { id: string }");
+		}
+		out.resolve_yak = { id: (r as { id: string }).id };
+	}
+	return out;
+}
+
+async function handlePatchTrack(
+	id: string,
+	req: IncomingMessage,
+	res: ServerResponse,
+): Promise<void> {
+	let raw: string;
+	try {
+		raw = await readBody(req, MAX_PATCH_BODY_BYTES);
+	} catch (err) {
+		sendJson(res, 413, { error: err instanceof Error ? err.message : String(err) });
+		return;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		sendJson(res, 400, { error: `invalid JSON: ${err instanceof Error ? err.message : String(err)}` });
+		return;
+	}
+	let body: PatchTrackBody;
+	try {
+		body = validatePatchBody(parsed);
+	} catch (err) {
+		sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+		return;
+	}
+
+	let track: Track;
+	try {
+		track = await loadTrackOrThrow(id);
+	} catch (err) {
+		sendJson(res, 404, { error: err instanceof Error ? err.message : String(err) });
+		return;
+	}
+
+	const now = new Date().toISOString();
+	try {
+		// Scalars first, then collections. Mutators throw on invalid input;
+		// we don't save until all ops succeed, so a throw leaves the file unchanged.
+		if (body.edge) track = setEdge(track, body.edge.statement, now);
+		if (body.next_action !== undefined) track = setNextAction(track, body.next_action, now);
+		if (body.outcome_compass !== undefined) track = reviseCompass(track, body.outcome_compass, now);
+		if (body.verify_command !== undefined) track = setVerifyCommand(track, body.verify_command);
+		if (body.session_min !== undefined) track = setSessionMin(track, body.session_min);
+		if (body.overview) track = setOverview(track, body.overview, now);
+		if (body.add_unit) track = addUnit(track, body.add_unit.title, now);
+		if (body.update_unit) track = updateUnit(track, body.update_unit.id, body.update_unit.patch, now);
+		if (body.add_resource) track = addResource(track, body.add_resource.title, body.add_resource.url, body.add_resource.kind);
+		if (body.add_yak) track = addYak(track, body.add_yak.desc);
+		if (body.resolve_yak) track = resolveYak(track, body.resolve_yak.id);
+	} catch (err) {
+		sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+		return;
+	}
+
+	await saveTrack(track);
+	sendJson(res, 200, track);
 }
 
 async function readSessionsLog(): Promise<Array<SessionLogEntry & { track_id: string }>> {

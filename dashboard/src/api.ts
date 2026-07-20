@@ -15,15 +15,41 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function sendJson<T>(method: "POST" | "PATCH" | "PUT", path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j?.error) msg = `${msg}: ${j.error}`;
+    } catch {
+      // non-JSON error body; keep the status text
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as T;
+}
+
 export const getIndex = (): Promise<TrackIndex> => getJson("/api/index");
 export const getTracks = async (): Promise<Track[]> => (await getJson<Track[]>("/api/tracks")).map(normalizeTrack);
 export const getTrack = async (id: string): Promise<Track> => normalizeTrack(await getJson<Track>(`/api/tracks/${encodeURIComponent(id)}`));
-export const getSessions = (): Promise<SessionLogLine[]> => getJson("/api/sessions").then((xs) => xs ?? []);
+export const getSessions = (): Promise<SessionLogLine[]> =>
+  getJson<SessionLogLine[] | null>("/api/sessions").then((xs) => xs ?? []);
 export const getTimer = (): Promise<TimerState> => getJson("/api/timer");
 export const getMarkdown = (trackId: string, url: string): Promise<MarkdownDocument> =>
   getJson(`/api/markdown?${new URLSearchParams({ track: trackId, url }).toString()}`);
 export const getDoc = (slug: string): Promise<DashboardDoc> =>
   getJson(`/api/docs/${encodeURIComponent(slug)}`);
+
+// Writable dashboard: PATCH a track. Body is a partial Track for scalar
+// fields plus explicit op keys (add_unit, update_unit, add_resource, …).
+// See lib/dashboard.ts validatePatchBody for the full allowlist.
+export const patchTrack = (id: string, body: Record<string, unknown>): Promise<Track> =>
+  sendJson<Track>("PATCH", `/api/tracks/${encodeURIComponent(id)}`, body).then(normalizeTrack);
 
 // Persisted track JSON may have `null` for array fields (older records, or
 // fields the writer left unset). Coerce to empty arrays so components can

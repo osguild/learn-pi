@@ -26,15 +26,20 @@
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import {
+	addUnit,
 	getActiveTrack,
 	loadTrackOrThrow,
-	newUnit,
+	reviseCompass,
 	saveTrack,
+	setEdge,
+	setNextAction,
+	setOverview,
+	setSessionMin,
+	setVerifyCommand,
 	trackExists,
 	trackKind,
 	type Track,
 } from "../lib/track";
-import { buildRubric } from "../lib/study-plan";
 import { collectTrackOverview, formatTrackOverview } from "../lib/track-overview";
 
 export default function learnPlan(pi: ExtensionAPI) {
@@ -65,16 +70,8 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
 			if (!rest) { ctx.ui.notify("No edge statement given.", "warning"); return; }
 			const now = new Date().toISOString();
-			let updated: Track = {
-				...track,
-				edge: { statement: rest, set_at: now, sessions_at_edge: 0 },
-				edge_suggested: false, // learner has now owned the edge
-			};
-			// Study tracks: regenerate the rubric for the new edge (the rubric
-			// is the study-track analog of verify_command — it must track the edge).
-			if (trackKind(track) === "study" && track.domain_family) {
-				updated = { ...updated, rubric: buildRubric(track.domain_family, rest) };
-			}
+			// setEdge regenerates the rubric for study tracks via buildRubric.
+			const updated = setEdge(track, rest, now);
 			const saved = await maybePromptNextAction(updated, ctx);
 			await saveTrack(saved);
 			ctx.ui.notify(`Edge set: "${rest}"`, "info");
@@ -84,7 +81,7 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	if (sub === "next") {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
 			if (!rest) { ctx.ui.notify("No next action given (cannot be empty — rule 1).", "warning"); return; }
-			const updated: Track = { ...track, next_action: rest, next_action_set_at: new Date().toISOString() };
+			const updated = setNextAction(track, rest, new Date().toISOString());
 			await saveTrack(updated);
 			ctx.ui.notify(`Next action set: "${rest}"`, "info");
 		});
@@ -93,7 +90,7 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	if (sub === "compass") {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
 			if (!rest) { ctx.ui.notify("No compass text given.", "warning"); return; }
-			const updated: Track = { ...track, outcome_compass: rest, outcome_compass_revised_at: new Date().toISOString() };
+			const updated = reviseCompass(track, rest, new Date().toISOString());
 			await saveTrack(updated);
 			ctx.ui.notify(`Outcome compass revised: "${rest}"`, "info");
 		});
@@ -101,7 +98,7 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	}
 	if (sub === "verify") {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
-			const updated: Track = { ...track, verify_command: rest || null };
+			const updated = setVerifyCommand(track, rest || null);
 			await saveTrack(updated);
 			ctx.ui.notify(`Verify command set: ${rest || "(cleared)"}`, "info");
 		});
@@ -111,7 +108,7 @@ async function run(args: string, ctx: ExtensionCommandContext): Promise<void> {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
 			const n = Number.parseInt(rest, 10);
 			if (!Number.isFinite(n) || n <= 0) { ctx.ui.notify(`Invalid minutes "${rest}".`, "warning"); return; }
-			const updated: Track = { ...track, process_contract: { ...track.process_contract, session_min: n } };
+			const updated = setSessionMin(track, n);
 			await saveTrack(updated);
 			ctx.ui.notify(`Session length set: ${n}m`, "info");
 		});
@@ -155,7 +152,7 @@ async function cmdOverview(tokens: string[], ctx: ExtensionCommandContext): Prom
 			},
 			track.overview,
 		);
-		await saveTrack({ ...track, overview });
+		await saveTrack(setOverview(track, overview, new Date().toISOString()));
 		ctx.ui.notify("Track overview updated.", "info");
 		return;
 	}
@@ -233,17 +230,9 @@ async function cmdUnit(tokens: string[], ctx: ExtensionCommandContext): Promise<
 	if (sub === "add") {
 		await withTrackAndRest(tokens.slice(1), ctx, async (track, rest) => {
 			if (!rest) { ctx.ui.notify("No unit title given.", "warning"); return; }
-			const unit = newUnit(rest);
-			const updated: Track = {
-				...track,
-				material_graph: {
-					...track.material_graph,
-					units: [...track.material_graph.units, unit],
-					revised_at: new Date().toISOString(),
-				},
-			};
+			const updated = addUnit(track, rest, new Date().toISOString());
 			await saveTrack(updated);
-			ctx.ui.notify(`Added unit: ${unit.id} — "${rest}" (manual ingestion stub)`, "info");
+			ctx.ui.notify(`Added unit (manual ingestion stub): "${rest}"`, "info");
 		});
 		return;
 	}

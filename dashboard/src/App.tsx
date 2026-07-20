@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { SessionLogLine, TimerState, Track, TrackIndex } from "./types";
 import { getTimer, getIndex, getTracks, getTrack, getSessions, formatClock } from "./api";
-import { TrackList } from "./components/TrackList";
+import { Home } from "./components/Home";
 import { TrackDetail } from "./components/TrackDetail";
 import { MarkdownViewer } from "./components/MarkdownViewer";
 import { DocsViewer } from "./components/DocsViewer";
+import { Nav, docBreadcrumbs, docsBreadcrumbs, trackBreadcrumbs } from "./components/Nav";
 import { navigateAppRoute, parseAppRoute, type AppRoute } from "./utils/routes";
 
 const POLL_MS = 5000;
@@ -16,7 +17,6 @@ function readAppRoute(): AppRoute {
 export default function App() {
   const [index, setIndex] = useState<TrackIndex | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Track | null>(null);
   const [sessions, setSessions] = useState<SessionLogLine[]>([]);
   const [timer, setTimer] = useState<TimerState | null>(null);
@@ -34,12 +34,8 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (appRoute?.kind === "doc") {
-      setSelectedId(appRoute.trackId);
-    }
-  }, [appRoute]);
-
+  // Poll: index + all tracks + sessions + timer. The full track for the
+  // current track page is loaded separately (below) and on edits.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -56,7 +52,6 @@ export default function App() {
         setSessions(sess);
         setTimer(tmr);
         setError(null);
-        setSelectedId((cur) => cur ?? idx.active_track_id ?? trks[0]?.id ?? null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -69,13 +64,16 @@ export default function App() {
     };
   }, []);
 
+  // The current track id is route-driven: only track pages load a full Track.
+  const currentTrackId = appRoute?.kind === "track" ? appRoute.trackId : null;
+
   useEffect(() => {
     let cancelled = false;
-    if (!selectedId) {
+    if (!currentTrackId) {
       setSelected(null);
       return;
     }
-    getTrack(selectedId)
+    getTrack(currentTrackId)
       .then((t) => {
         if (!cancelled) setSelected(t);
       })
@@ -85,39 +83,77 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, index, tracks]);
+  }, [currentTrackId, index, tracks]);
+
+  // Immediate refetch of the current track after a dashboard edit, so the
+  // UI reflects the change without waiting for the 5s poll.
+  const refreshSelectedTrack = () => {
+    if (!currentTrackId) return;
+    getTrack(currentTrackId)
+      .then((t) => setSelected(t))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
 
   const timerRemaining = timer ? computeRemaining(timer) : 0;
+  const timerChip = timer ? (
+    <div className={`timer-chip timer-${timer.mode}${timer.paused ? " paused" : ""}`}>
+      <span className="timer-mode">{timer.mode}</span>
+      <span className="timer-time">{formatClock(timerRemaining)}</span>
+      {timer.paused && <span className="dim">paused</span>}
+      {timer.track && <span className="dim small">· {timer.track}</span>}
+    </div>
+  ) : null;
 
+  const goHome = () => {
+    const route: AppRoute = { kind: "home" };
+    navigateAppRoute(route);
+    setAppRoute(route);
+  };
+  const goToTrack = (id: string) => {
+    const route: AppRoute = { kind: "track", trackId: id };
+    navigateAppRoute(route);
+    setAppRoute(route);
+  };
   const goToDocs = () => {
     const route: AppRoute = { kind: "docs", slug: "dashboard" };
     navigateAppRoute(route);
     setAppRoute(route);
   };
-
   const backFromOverlay = () => {
-    navigateAppRoute(null);
-    setAppRoute(null);
+    // After viewing a doc/resource, return to the track page (or home).
+    if (currentTrackId) {
+      goToTrack(currentTrackId);
+    } else {
+      goHome();
+    }
   };
+
+  // Breadcrumbs per route kind.
+  let breadcrumbs: React.ReactNode = (
+    <>
+      <span className="crumb crumb-current">learn-pi</span>
+    </>
+  );
+  if (appRoute?.kind === "track" && selected) {
+    breadcrumbs = trackBreadcrumbs(selected);
+  } else if (appRoute?.kind === "docs") {
+    breadcrumbs = docsBreadcrumbs();
+  } else if (appRoute?.kind === "doc" && selected) {
+    breadcrumbs = docBreadcrumbs(selected);
+  }
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="app-header-left">
-          <h1>learn-pi</h1>
-          <button type="button" className="docs-btn" onClick={goToDocs}>
-            Docs
-          </button>
-        </div>
-        {timer && (
-          <div className={`timer-chip timer-${timer.mode}${timer.paused ? " paused" : ""}`}>
-            <span className="timer-mode">{timer.mode}</span>
-            <span className="timer-time">{formatClock(timerRemaining)}</span>
-            {timer.paused && <span className="dim">paused</span>}
-            {timer.track && <span className="dim small">· {timer.track}</span>}
-          </div>
-        )}
-      </header>
+      <Nav
+        index={index ?? { active_track_id: null, tracks: [] }}
+        tracks={tracks}
+        currentTrackId={currentTrackId}
+        onGoHome={goHome}
+        onSelectTrack={goToTrack}
+        onGoDocs={goToDocs}
+        timerChip={timerChip}
+        breadcrumbs={breadcrumbs}
+      />
 
       {error && (
         <div className="error">
@@ -128,38 +164,32 @@ export default function App() {
         </div>
       )}
 
-      <div className="layout">
-        <aside className="sidebar">
-          {index && (
-            <TrackList
-              index={index}
-              tracks={tracks}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          )}
-          <div className="sessions-summary dim small">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"} logged
-          </div>
-        </aside>
-        <main className="main">
-          {appRoute?.kind === "docs" ? (
-            <DocsViewer slug={appRoute.slug} onBack={backFromOverlay} />
-          ) : appRoute?.kind === "doc" ? (
-            <MarkdownViewer
-              trackId={appRoute.trackId}
-              url={appRoute.url}
-              onBack={backFromOverlay}
-            />
-          ) : selected && index ? (
-            <TrackDetail track={selected} index={index} />
+      <main className="main">
+        {appRoute?.kind === "docs" ? (
+          <DocsViewer slug={appRoute.slug} onBack={backFromOverlay} />
+        ) : appRoute?.kind === "doc" ? (
+          <MarkdownViewer trackId={appRoute.trackId} url={appRoute.url} onBack={backFromOverlay} />
+        ) : appRoute?.kind === "track" ? (
+          selected && index ? (
+            <TrackDetail track={selected} index={index} onTrackChanged={refreshSelectedTrack} />
           ) : (
             <div className="empty">
-              <p>Select a track from the sidebar, or create one with a <code>/learn-*</code> command.</p>
+              <p>Loading track…</p>
             </div>
-          )}
-        </main>
-      </div>
+          )
+        ) : index ? (
+          <>
+            <Home index={index} tracks={tracks} />
+            <div className="sessions-summary dim small">
+              {sessions.length} session{sessions.length === 1 ? "" : "s"} logged
+            </div>
+          </>
+        ) : (
+          <div className="empty">
+            <p>Loading…</p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
