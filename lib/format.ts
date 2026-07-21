@@ -55,6 +55,7 @@ export function renderTrackDashboard(
 		material_graph?: { units: MaterialUnit[] };
 	},
 	width: number,
+	exerciseUnit?: MaterialUnit | null,
 ): string[] {
 	const theme = ctx.ui.theme;
 	const innerWidth = Math.max(20, width - 4);
@@ -65,7 +66,18 @@ export function renderTrackDashboard(
 		lines.push(theme.fg("dim", `  ${l}`));
 	}
 	lines.push(theme.fg("warning", "  edge:") + ` ${truncatePlain(track.edge.statement, innerWidth - 8)}`);
-	lines.push(theme.fg("success", "  next:") + ` ${truncatePlain(track.next_action, innerWidth - 8)}`);
+	if (exerciseUnit?.exercise) {
+		const ex = exerciseUnit.exercise;
+		lines.push(
+			theme.fg("success", "  exercise:") +
+				` ${truncatePlain(exerciseUnit.title, innerWidth - 12)} [${ex.status}]`,
+		);
+		if (ex.starter_path) {
+			lines.push(theme.fg("dim", `    file: ${truncatePlain(ex.starter_path, innerWidth - 10)}`));
+		}
+	} else {
+		lines.push(theme.fg("success", "  next:") + ` ${truncatePlain(track.next_action, innerWidth - 8)}`);
+	}
 	if (track.stall_counter > 0) {
 		lines.push(theme.fg("muted", `  stall: ${track.stall_counter} session${track.stall_counter === 1 ? "" : "s"} without progress`));
 	}

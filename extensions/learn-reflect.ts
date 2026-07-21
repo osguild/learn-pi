@@ -29,7 +29,10 @@ import {
 	saveTrack,
 	trackExists,
 	trackKind,
+	setUnitExerciseStatus,
+	unitsWithExercises,
 	STALL_THRESHOLD,
+	type ExerciseStatus,
 	type Track,
 } from "../lib/track";
 
@@ -115,6 +118,17 @@ export default function learnReflect(pi: ExtensionAPI) {
 			.filter(Boolean)
 			.map((desc) => ({ id: `yak-${desc.slice(0, 8).replace(/[^a-z0-9]/gi, "")}-${Date.now().toString(36).slice(-4)}`, desc, added_at: new Date().toISOString(), resolved: false }));
 
+		let trackForReflection = track;
+		const exerciseUnits = unitsWithExercises(track);
+		if (!isStudy && exerciseUnits.length > 0) {
+			const advanced = await collectExerciseAdvancement(track, ctx);
+			if (advanced === null) {
+				ctx.ui.notify("Reflection cancelled — track unchanged.", "info");
+				return;
+			}
+			trackForReflection = advanced;
+		}
+
 		// Double-loop (Argyris) — only on sustained stall.
 		let outcomeCompassRevised = false;
 		let newOutcomeCompass: string | null = null;
@@ -143,7 +157,7 @@ export default function learnReflect(pi: ExtensionAPI) {
 		if (rubricNote) note = note ? `${note}  [${rubricNote}]` : rubricNote;
 		const cued = track.last_session_at === null ? false : isCuedSession(track);
 
-		const updated = applyReflection(track, {
+		const updated = applyReflection(trackForReflection, {
 			minutes,
 			edgeBefore,
 			edgeCrossed,
@@ -208,6 +222,38 @@ export default function learnReflect(pi: ExtensionAPI) {
 	 * the evidence-grounded analog of a programming track's `cargo test` passing.
 	 * The summary string is folded into the session note so the log records it.
 	 */
+	async function collectExerciseAdvancement(
+		track: Track,
+		ctx: ExtensionCommandContext,
+	): Promise<Track | null> {
+		const withExercises = unitsWithExercises(track);
+		const labels = withExercises.map((u) => `${u.title} (${u.id})`);
+		const unitPick = await ctx.ui.select(
+			"Which unit's exercise did you advance?",
+			labels,
+		);
+		if (unitPick === undefined) return null;
+		const unit = withExercises[labels.indexOf(unitPick)];
+		if (!unit) return null;
+
+		const statusLabels: Record<ExerciseStatus, string> = {
+			todo: "todo — not started",
+			in_progress: "in_progress — still coding",
+			reviewing: "reviewing — tests pass, awaiting review",
+			passing: "passing — done and reviewed",
+		};
+		const statusPick = await ctx.ui.select(
+			`Exercise status for "${unit.title}":`,
+			(Object.keys(statusLabels) as ExerciseStatus[]).map((s) => statusLabels[s]),
+		);
+		if (statusPick === undefined) return null;
+		const status = (Object.entries(statusLabels).find(([, label]) => label === statusPick)?.[0] ??
+			"todo") as ExerciseStatus;
+
+		const now = new Date().toISOString();
+		return setUnitExerciseStatus(track, unit.id, status, now);
+	}
+
 	async function collectRubric(
 		questions: string[],
 		edge: string,

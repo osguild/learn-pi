@@ -16,7 +16,10 @@
  *   7. Hand off to /learn-start by emitting the same kickoff path.
  *
  * Command:
- *   /learn-scaffold <recipe> [dir]   e.g. /learn-scaffold webgpu-rust ~/gitrepos/rust-webgpu
+ *   /learn-scaffold                              Starter template picker (programming + study)
+ *   /learn-scaffold template <id> [language] [dir]
+ *   /learn-scaffold generic [goal] [dir]         Open-ended wizard
+ *   /learn-scaffold <recipe> [dir]               e.g. /learn-scaffold webgpu-rust
  */
 
 import { homedir } from "node:os";
@@ -24,6 +27,12 @@ import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import {
+	applyTrackTemplate,
+	defaultTargetDir,
+	resolveTemplateDir,
+	targetDirExists,
+} from "../lib/apply-track-template";
 import {
 	ensureBuiltinRecipes,
 	emitSkeleton,
@@ -41,6 +50,14 @@ import {
 	LANGUAGE_SKELETONS,
 	type Depth,
 } from "../lib/scaffold";
+import {
+	getTrackTemplate,
+	languageLabel,
+	listTemplatesByTier,
+	listTrackTemplates,
+	type TemplateTier,
+	type TrackTemplate,
+} from "../lib/track-templates";
 import { freshTrack, saveTrack, trackExists, type Track } from "../lib/track";
 import { collectTrackOverview } from "../lib/track-overview";
 import { slugify, normalizeGoal } from "../lib/paths";
@@ -48,23 +65,219 @@ import { webSearch } from "../lib/web";
 
 export default function learnScaffold(pi: ExtensionAPI) {
 	pi.registerCommand("learn-scaffold", {
-		description: "Scaffold a new project + learning track. /learn-scaffold [generic] <recipe|goal> [dir].",
+		description: "Scaffold a new project + track. /learn-scaffold [template|generic] …",
 		handler: async (args, ctx) => {
 			await run(args, ctx, pi);
 		},
 	});
 }
 
+const TIER_LABELS: Record<TemplateTier, string> = {
+	beginner: "Beginner",
+	intermediate: "Intermediate",
+	advanced: "Advanced",
+};
+
 async function run(args: string, ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
 	await ensureBuiltinRecipes();
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
 
-	// Generic wizard path: no arg, or first arg is "generic".
-	if (tokens.length === 0 || tokens[0] === "generic") {
+	if (tokens.length === 0) {
+		await runTemplatePicker(ctx, pi);
+		return;
+	}
+	if (tokens[0] === "template") {
+		await runTemplateDirect(tokens.slice(1), ctx, pi);
+		return;
+	}
+	if (tokens[0] === "generic") {
 		await runGeneric(tokens.slice(1), ctx, pi);
 		return;
 	}
 	await runRecipe(tokens, ctx, pi);
+}
+
+// --- Starter template picker ------------------------------------------------
+
+async function runTemplatePicker(ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {
+	const mode = await ctx.ui.select("Start a new track:", [
+		"Pick a starter template (recommended)",
+		"Custom goal (generic wizard)",
+		"Legacy recipe (webgpu-rust, …)",
+	]);
+	if (!mode) {
+		ctx.ui.notify("Cancelled.", "warning");
+		return;
+	}
+	if (mode.startsWith("Custom goal")) {
+		await runGeneric([], ctx, pi);
+		return;
+	}
+	if (mode.startsWith("Legacy recipe")) {
+		await runRecipe([], ctx, pi);
+		return;
+	}
+
+	const tierPick = await ctx.ui.select("Tier:", [
+		TIER_LABELS.beginner,
+		TIER_LABELS.intermediate,
+		TIER_LABELS.advanced,
+	]);
+	if (!tierPick) return;
+	const tier = (Object.entries(TIER_LABELS).find(([, l]) => l === tierPick)?.[0] ?? "beginner") as TemplateTier;
+	const templates = listTemplatesByTier(tier);
+	if (templates.length === 0) {
+		ctx.ui.notify("No templates for this tier.", "warning");
+		return;
+	}
+
+	const templatePick = await ctx.ui.select(
+		`${tierPick} templates:`,
+		templates.map((t) => `${t.label} — ${t.blurb}`),
+	);
+	if (!templatePick) return;
+	const template = templates.find((t) => templatePick.startsWith(t.label));
+	if (!template) return;
+
+	await scaffoldFromTemplate(template, {}, ctx, pi);
+}
+
+async function runTemplateDirect(
+	tokens: string[],
+	ctx: ExtensionCommandContext,
+	pi: ExtensionAPI,
+): Promise<void> {
+	const templateId = tokens[0];
+	if (!templateId) {
+		const all = listTrackTemplates();
+		const pick = await ctx.ui.select(
+			"Template id:",
+			all.map((t) => `${t.id} — ${t.label}`),
+		);
+		if (!pick) return;
+		const id = pick.split(" — ")[0];
+		await scaffoldFromTemplate(getTrackTemplate(id)!, { language: tokens[1] }, ctx, pi);
+		return;
+	}
+	const template = getTrackTemplate(templateId);
+	if (!template) {
+		ctx.ui.notify(`Unknown template "${templateId}".`, "error");
+		return;
+	}
+	// tokens[1] may be language or dir; tokens[2] dir if language present
+	let language: string | undefined;
+	let targetDir: string | undefined;
+	if (template.kind === "programming" && template.languages.length > 0) {
+		if (tokens[1] && template.languages.includes(tokens[1])) {
+			language = tokens[1];
+			targetDir = tokens[2];
+		} else {
+			targetDir = tokens[1];
+		}
+	} else {
+		targetDir = tokens[1];
+	}
+	await scaffoldFromTemplate(template, { language, targetDir }, ctx, pi);
+}
+
+interface TemplateRunOpts {
+	language?: string;
+	topic?: string;
+	targetDir?: string;
+}
+
+async function scaffoldFromTemplate(
+	template: TrackTemplate,
+	opts: TemplateRunOpts,
+	ctx: ExtensionCommandContext,
+	pi: ExtensionAPI,
+): Promise<void> {
+	let language = opts.language;
+	let topic = opts.topic;
+
+	if (template.kind === "programming" && !template.recipe && template.languages.length > 1 && !language) {
+		const langPick = await ctx.ui.select(
+			"Pick a language:",
+			template.languages.map((l) => languageLabel(l)),
+		);
+		if (!langPick) return;
+		language = template.languages.find((l) => languageLabel(l) === langPick);
+	} else if (template.kind === "programming" && template.languages.length === 1 && !language) {
+		language = template.languages[0];
+	}
+
+	if (template.kind === "study" && template.customizableTopic && !topic) {
+		const ans = await ctx.ui.input("Topic:", template.topicPlaceholder ?? template.default_topic);
+		if (!ans?.trim()) {
+			ctx.ui.notify("Topic required.", "warning");
+			return;
+		}
+		topic = normalizeGoal(ans.trim());
+	} else if (template.kind === "study" && !topic) {
+		topic = template.default_topic;
+	}
+
+	const previewTopic = template.kind === "study" ? topic : undefined;
+	const fallbackDir = defaultTargetDir(template, previewTopic);
+	const dirArg =
+		opts.targetDir ??
+		(await ctx.ui.input("Target directory:", fallbackDir));
+	const targetDir = resolveTemplateDir(dirArg, fallbackDir);
+
+	if (targetDirExists(targetDir)) {
+		const ok = await ctx.ui.confirm(
+			"Target dir exists",
+			`${targetDir} already exists. Scaffold into it anyway?`,
+		);
+		if (!ok) return;
+	}
+
+	const trackId =
+		template.kind === "study" && topic
+			? slugify(topic)
+			: slugify(template.id);
+	if (await trackExists(trackId)) {
+		const ok = await ctx.ui.confirm(
+			"Track exists",
+			`Track "${trackId}" already exists. Overwrite with the template?`,
+		);
+		if (!ok) return;
+	}
+
+	ctx.ui.setStatus("learn-scaffold", `Applying template ${template.id}…`);
+	let result;
+	try {
+		result = await applyTrackTemplate({
+			templateId: template.id,
+			language,
+			topic,
+			targetDir,
+			trackId,
+		});
+	} catch (err) {
+		ctx.ui.setStatus("learn-scaffold", undefined);
+		ctx.ui.notify(`Template failed: ${(err as Error).message}`, "error");
+		return;
+	}
+	ctx.ui.setStatus("learn-scaffold", undefined);
+
+	const { track, filesWritten, warnings } = result;
+	let msg =
+		`Template "${template.label}" → ${targetDir}\n` +
+		`${filesWritten} files, ${track.material_graph.units.length} units, ${track.glossary.length} glossary terms.\n` +
+		`Edge: "${track.edge.statement}"\nNext: "${track.next_action}"`;
+	if (warnings.length > 0) msg += `\nWarnings:\n${warnings.join("\n")}`;
+	ctx.ui.notify(msg, warnings.length > 0 ? "warning" : "info");
+
+	const choice = await ctx.ui.select("Next step:", [
+		"Revise edge / next action (/learn-plan)",
+		"Start a session (/learn-start)",
+	]);
+	if (choice?.startsWith("Start")) {
+		pi.sendUserMessage(`/learn-start ${track.id}`);
+	} else {
+		pi.sendUserMessage(`/learn-plan ${track.id}`);
+	}
 }
 
 async function runRecipe(tokens: string[], ctx: ExtensionCommandContext, pi: ExtensionAPI): Promise<void> {

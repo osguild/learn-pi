@@ -14,7 +14,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getActiveTrack } from "../lib/track";
+import { getActiveTrack, resolveActiveExerciseUnit } from "../lib/track";
 import { ensureLearnRoot } from "../lib/track";
 import { renderTrackDashboard } from "../lib/format";
 import learnStart from "./learn-start";
@@ -66,7 +66,8 @@ export default function learnPi(pi: ExtensionAPI) {
 			return;
 		}
 		if (!ctx.hasUI) return;
-		const lines = renderTrackDashboard(ctx, track, DASHBOARD_WIDTH);
+		const exerciseUnit = resolveActiveExerciseUnit(track);
+		const lines = renderTrackDashboard(ctx, track, DASHBOARD_WIDTH, exerciseUnit);
 		ctx.ui.setWidget(DASHBOARD_WIDGET, lines, { placement: "belowEditor" });
 	});
 

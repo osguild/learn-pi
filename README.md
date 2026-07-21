@@ -18,7 +18,7 @@ The package holds one `Track` record per learning track in `~/.pi/learn/tracks/<
 | `/learn-reflect [track]` | **Loop-closer.** Structured 3-question reflection (crossed the edge? next action? any yaks to defer?) that updates the edge + next_action + yaks. Double-loop (Argyris) question surfaces only after N stalled sessions. |
 | `/learn-plan [track] <sub>` | Forethought: set/revise edge, next action, outcome compass, verify command, session length, or manual material units. Socratic is OFF here (management, not learning). |
 | `/learn-timer [start\|pause\|resume\|stop\|reset\|stats]` | Pomodoro + session-duration tracker. Default length comes from the active track's `process_contract.session_min`. |
-| `/learn-scaffold [generic] <recipe\|goal> [dir]` | **v1's big feature.** Two paths. **Recipe:** `/learn-scaffold webgpu-rust` generates a project + Track from a curated recipe — eliminates required-but-painful setup that has no good tutorial. **Generic wizard:** `/learn-scaffold` (no arg) walks an open-ended goal ("ML fundamentals"), recommends a language + framework, gauges depth (`guided` / `standard` / `from-scratch`), synthesizes a skeleton, and pre-seeds the Track with a *suggested* first edge you accept or replace via `/learn-plan`. |
+| `/learn-scaffold [template\|generic] …` | **Scaffold a project + track.** No args opens the **starter template picker** (beginner / intermediate / advanced; programming + study; language pick when supported). Also: `/learn-scaffold template <id>`, `/learn-scaffold generic` (open-ended wizard), `/learn-scaffold webgpu-rust` (legacy recipe). |
 | `/learn-study [topic] [dir]` | **Study-track scaffolder** for any non-coding topic (music, languages, history, math, science). Emits a notes workspace + a self-assessment rubric (the non-coding analog of `cargo test`), seeds 3–5 sequenced material units, and pre-seeds a *suggested* first edge. The rubric is scored during `/learn-reflect` and feeds the stall counter the same way a failing verify command would. |
 | `/learn-cue [set\|show\|test\|clear] [track]` | Hard cue: writes a launchd job (→ cron → ics fallback) that fires an OS notification carrying the current next_action when pi is closed. |
 | `/learn-yaks [add\|resolve\|list\|all] [track]` | The deferred-yaks list. Tangential drift gets deferred here, not blocked. |
@@ -107,9 +107,13 @@ The package never writes learning-state files into your project repo. The projec
 /learn-reflect                       # close the loop: update edge + next action + yaks
 
 # Generic wizard (open-ended learning goal):
-/learn-scaffold                      # then: state a goal, pick depth + language, optional framework search
-/learn-plan                          # accept / revise / replace the wizard's suggested edge, set next action
+/learn-scaffold generic                    # custom goal + language pick
+/learn-plan                                 # accept / revise the suggested edge, set next action
 /learn-start
+
+# Starter template (curated track with units + glossary):
+/learn-scaffold                             # picker: tier → template → language (if needed)
+/learn-scaffold template python-cli-basics  # direct by id
 
 # Study track (any non-coding topic):
 /learn-study "music theory fundamentals"   # then: pick depth + domain family, optional source search

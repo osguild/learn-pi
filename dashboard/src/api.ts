@@ -2,7 +2,7 @@
 // runtime (or proxied to :7331 in dev). Polling is the refresh model —
 // tracks change slowly, so 5s is plenty.
 
-import type { DashboardDoc, MarkdownDocument, SessionLogLine, TimerState, Track, TrackIndex } from "./types";
+import type { DashboardDoc, MarkdownDocument, ScaffoldTemplateResult, SessionLogLine, TimerState, Track, TrackIndex, TrackTemplateMeta } from "./types";
 
 const API_BASE = "";
 
@@ -34,6 +34,20 @@ async function sendJson<T>(method: "POST" | "PATCH" | "PUT", path: string, body:
   return (await res.json()) as T;
 }
 
+async function deleteJson(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j?.error) msg = `${msg}: ${j.error}`;
+    } catch {
+      // non-JSON error body; keep the status text
+    }
+    throw new Error(msg);
+  }
+}
+
 export const getIndex = (): Promise<TrackIndex> => getJson("/api/index");
 export const getTracks = async (): Promise<Track[]> => (await getJson<Track[]>("/api/tracks")).map(normalizeTrack);
 export const getTrack = async (id: string): Promise<Track> => normalizeTrack(await getJson<Track>(`/api/tracks/${encodeURIComponent(id)}`));
@@ -45,11 +59,22 @@ export const getMarkdown = (trackId: string, url: string): Promise<MarkdownDocum
 export const getDoc = (slug: string): Promise<DashboardDoc> =>
   getJson(`/api/docs/${encodeURIComponent(slug)}`);
 
+export const getTemplates = (): Promise<TrackTemplateMeta[]> => getJson("/api/templates");
+
+export const scaffoldTemplate = (
+  templateId: string,
+  body: { language?: string; topic?: string; targetDir?: string; overwrite?: boolean },
+): Promise<ScaffoldTemplateResult> =>
+  sendJson<ScaffoldTemplateResult>("POST", `/api/templates/${encodeURIComponent(templateId)}/scaffold`, body);
+
 // Writable dashboard: PATCH a track. Body is a partial Track for scalar
 // fields plus explicit op keys (add_unit, update_unit, add_resource, …).
 // See lib/dashboard.ts validatePatchBody for the full allowlist.
 export const patchTrack = (id: string, body: Record<string, unknown>): Promise<Track> =>
   sendJson<Track>("PATCH", `/api/tracks/${encodeURIComponent(id)}`, body).then(normalizeTrack);
+
+export const deleteTrack = (id: string): Promise<void> =>
+  deleteJson(`/api/tracks/${encodeURIComponent(id)}`);
 
 // Persisted track JSON may have `null` for array fields (older records, or
 // fields the writer left unset). Coerce to empty arrays so components can

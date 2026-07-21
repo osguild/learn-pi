@@ -39,14 +39,19 @@ type DashboardProbe = "ok" | "stale" | "none";
 
 async function probeDashboard(port: number): Promise<DashboardProbe> {
 	try {
-		const res = await fetch(`http://127.0.0.1:${port}/api/docs/dashboard`, {
+		const templates = await fetch(`http://127.0.0.1:${port}/api/templates`, {
 			signal: AbortSignal.timeout(1500),
 		});
-		if (res.ok) return "ok";
-		if (res.status === 404) {
-			const text = await res.text();
+		if (templates.ok) return "ok";
+		if (templates.status === 404) {
+			const text = await templates.text();
 			if (text.includes("Unknown route")) return "stale";
 		}
+		// Something is listening but lacks the templates API (pre-template dashboard).
+		const index = await fetch(`http://127.0.0.1:${port}/api/index`, {
+			signal: AbortSignal.timeout(1500),
+		});
+		if (index.ok) return "stale";
 	} catch {
 		// Port closed or not a dashboard server.
 	}
@@ -107,9 +112,9 @@ async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContex
 	if (staleOnPreferred === "stale") {
 		ctx.ui.notify(
 			[
-				`Port ${preferredPort} has an outdated dashboard (missing Docs API).`,
+				`Port ${preferredPort} has an outdated dashboard (missing /api/templates).`,
 				"Stop it in the other pi session (/learn-dashboard stop) or quit that pi,",
-				"then run /learn-dashboard start again here.",
+				"restart pi to load the latest learn-pi code, then /learn-dashboard start again.",
 			].join(" "),
 			"warning",
 		);
@@ -158,10 +163,10 @@ async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContex
 		ctx.ui.notify(`learn-pi dashboard: ${server.url}`, "info");
 	}
 
-	const docsOk = (await probeDashboard(server.port)) === "ok";
-	if (!docsOk) {
+	const apiOk = (await probeDashboard(server.port)) === "ok";
+	if (!apiOk) {
 		ctx.ui.notify(
-			"Docs API missing — restart pi to load the latest learn-pi code, then /learn-dashboard start.",
+			"Templates API missing — restart pi to load the latest learn-pi code, then /learn-dashboard stop && start.",
 			"warning",
 		);
 	}

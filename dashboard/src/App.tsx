@@ -97,6 +97,25 @@ export default function App() {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
 
+  const refreshTracks = () => {
+    void Promise.all([getIndex(), getTracks()])
+      .then(([idx, trks]) => {
+        setIndex(idx);
+        setTracks(trks);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+
+  const handleTrackRemoved = (trackId: string) => {
+    refreshTracks();
+    if (
+      currentTrackId === trackId ||
+      (appRoute?.kind === "doc" && appRoute.trackId === trackId)
+    ) {
+      goHome();
+    }
+  };
+
   const timerRemaining = timer ? computeRemaining(timer) : 0;
   const timerChip = timer ? (
     <div className={`timer-chip timer-${timer.mode}${timer.paused ? " paused" : ""}`}>
@@ -177,7 +196,12 @@ export default function App() {
           <MarkdownViewer trackId={appRoute.trackId} url={appRoute.url} onBack={backFromOverlay} />
         ) : appRoute?.kind === "track" ? (
           selected && index ? (
-            <TrackDetail track={selected} index={index} onTrackChanged={refreshSelectedTrack} />
+            <TrackDetail
+              track={selected}
+              index={index}
+              onTrackChanged={refreshSelectedTrack}
+              onTrackRemoved={handleTrackRemoved}
+            />
           ) : (
             <div className="empty">
               <p>Loading track…</p>
@@ -185,7 +209,15 @@ export default function App() {
           )
         ) : index ? (
           <>
-            <Home index={index} tracks={tracks} />
+            <Home
+              index={index}
+              tracks={tracks}
+              onTrackCreated={(id) => {
+                refreshTracks();
+                goToTrack(id);
+              }}
+              onTrackRemoved={handleTrackRemoved}
+            />
             <div className="sessions-summary dim small">
               {sessions.length} session{sessions.length === 1 ? "" : "s"} logged
             </div>

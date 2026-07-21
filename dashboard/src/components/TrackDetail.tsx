@@ -6,14 +6,16 @@ import { MaterialGraph } from "./MaterialGraph";
 import { ResourcesList, YaksList } from "./Lists";
 import { GlossaryList } from "./GlossaryList";
 import { SessionLog } from "./SessionLog";
+import { RemoveTrackButton } from "./RemoveTrackButton";
 
 interface Props {
   track: Track;
   index: TrackIndex;
   onTrackChanged: () => void;
+  onTrackRemoved: (trackId: string) => void;
 }
 
-export function TrackDetail({ track, index, onTrackChanged }: Props) {
+export function TrackDetail({ track, index, onTrackChanged, onTrackRemoved }: Props) {
   const isActive = track.id === index.active_track_id;
   const isStudy = (track.track_kind ?? "programming") === "study";
   const stalled = track.stall_counter >= 3;
@@ -31,6 +33,12 @@ export function TrackDetail({ track, index, onTrackChanged }: Props) {
               stall: {track.stall_counter}
             </span>
           )}
+          <RemoveTrackButton
+            trackId={track.id}
+            trackLabel={track.label}
+            onRemoved={onTrackRemoved}
+            className="track-remove-btn track-remove-btn-detail"
+          />
         </div>
         <div className="dh-meta dim small">
           <span className="mono">{track.id}</span>

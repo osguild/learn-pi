@@ -58,6 +58,23 @@ export interface GlossaryEntry {
   revised_at?: string;
 }
 
+export type ExerciseStatus = "todo" | "in_progress" | "passing" | "reviewing";
+
+export interface Exercise {
+  spec: string;
+  starter_path?: string;
+  test_command: string;
+  test_path?: string;
+  status: ExerciseStatus;
+  last_run_at?: string;
+}
+
+export interface ReferenceMaterial {
+  summary: string;
+  sources: Array<{ title: string; url: string }>;
+  glossary_terms?: string[];
+}
+
 export interface MaterialUnit {
   id: string;
   title: string;
@@ -66,6 +83,8 @@ export interface MaterialUnit {
   status: "pending" | "active" | "done" | "skipped";
   notes?: string;
   resources?: Resource[];
+  exercise?: Exercise;
+  reference?: ReferenceMaterial;
 }
 
 export interface MaterialGraph {
@@ -168,4 +187,26 @@ export interface DashboardDoc {
   slug: string;
   path: string;
   content: string;
+}
+
+export type TemplateTier = "beginner" | "intermediate" | "advanced";
+
+export interface TrackTemplateMeta {
+  id: string;
+  label: string;
+  tier: TemplateTier;
+  kind: "programming" | "study";
+  blurb: string;
+  languages: string[];
+  language_labels: Record<string, string>;
+  customizable_topic: boolean;
+  topic_placeholder?: string;
+  recipe: boolean;
+}
+
+export interface ScaffoldTemplateResult {
+  track: Track;
+  targetDir: string;
+  filesWritten: number;
+  warnings: string[];
 }

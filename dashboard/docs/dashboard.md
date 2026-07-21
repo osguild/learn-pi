@@ -4,6 +4,10 @@ Local web UI for your learning tracks in `~/.pi/learn/`. Start it with `/learn-d
 
 The dashboard **polls every few seconds** while open and supports **inline editing** for most track fields. Changes write back to the Track record via `PATCH /api/tracks/:id`.
 
+### Starter templates
+
+The home page lists **starter templates** by tier (beginner / intermediate / advanced). Each template pre-seeds edge, next action, material units, resources, and glossary. Programming templates let you pick a language when multiple are supported; study templates may prompt for a topic. CLI equivalent: `/learn-scaffold` with no arguments.
+
 ## Layout
 
 ### Header

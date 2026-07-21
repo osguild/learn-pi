@@ -10,10 +10,12 @@
  *   GET  /api/index              -> TrackIndex
  *   GET  /api/tracks              -> Track[]
  *   GET  /api/tracks/:id          -> Track
+ *   DELETE /api/tracks/:id        -> { ok: true }
  *   GET  /api/sessions            -> SessionLogLine[] (cross-track, newest last)
  *   GET  /api/timer               -> TimerState (best-effort; null if absent)
  *   GET  /api/markdown?track=&url= -> MarkdownDocument (local .md under work_dir)
- *   GET  /api/docs/:slug           -> DashboardDoc (bundled dashboard docs)
+ *   GET  /api/templates           -> TrackTemplateMeta[]
+ *   POST /api/templates/:id/scaffold -> { track, targetDir, filesWritten }
  *
  * Binds 127.0.0.1 only — localhost visualization, not a network service.
  */
@@ -29,6 +31,7 @@ import {
 	addResource,
 	addUnit,
 	addYak,
+	deleteTrack,
 	loadIndex,
 	loadTrack,
 	loadTrackOrThrow,
@@ -42,6 +45,7 @@ import {
 	setOverview,
 	setSessionMin,
 	setVerifyCommand,
+	trackExists,
 	updateGlossaryEntry,
 	updateUnit,
 	type GlossaryEntry,
@@ -56,6 +60,10 @@ import { LEARN_ROOT, SESSIONS_LOG } from "./paths";
 import { mergeScannedGlossary, scanTrackGlossaryCandidates } from "./glossary-scan";
 import { readMarkdownForTrack } from "./markdown-serve";
 import { readDashboardDoc } from "./docs-serve";
+import { applyTrackTemplate } from "./apply-track-template";
+import { ensureBuiltinRecipes } from "./scaffold";
+import { getTrackTemplate, listTrackTemplateMeta } from "./track-templates";
+import { slugify } from "./paths";
 
 export interface DashboardServerOptions {
 	port?: number;
@@ -203,6 +211,20 @@ async function apiRoute(
 	searchParams: URLSearchParams,
 	res: ServerResponse,
 ): Promise<void> {
+	if (pathname === "/api/templates") {
+		if (req.method === "GET") {
+			sendJson(res, 200, listTrackTemplateMeta());
+			return;
+		}
+		sendJson(res, 405, { error: "Method not allowed" });
+		return;
+	}
+	const templateScaffoldMatch = pathname.match(/^\/api\/templates\/([^/]+)\/scaffold$/);
+	if (templateScaffoldMatch && req.method === "POST") {
+		const templateId = decodeURIComponent(templateScaffoldMatch[1]);
+		await handleTemplateScaffold(templateId, req, res);
+		return;
+	}
 	if (pathname === "/api/index") {
 		const idx = await loadIndex();
 		sendJson(res, 200, idx);
@@ -223,6 +245,10 @@ async function apiRoute(
 		const id = decodeURIComponent(trackMatch[1]);
 		if (req.method === "PATCH") {
 			await handlePatchTrack(id, req, res);
+			return;
+		}
+		if (req.method === "DELETE") {
+			await handleDeleteTrack(id, res);
 			return;
 		}
 		const t = await loadTrack(id);
@@ -282,6 +308,67 @@ async function apiRoute(
 		return;
 	}
 	sendJson(res, 404, { error: `Unknown route ${pathname}` });
+}
+
+interface ScaffoldTemplateBody {
+	language?: string;
+	topic?: string;
+	targetDir?: string;
+	overwrite?: boolean;
+}
+
+async function handleTemplateScaffold(
+	templateId: string,
+	req: IncomingMessage,
+	res: ServerResponse,
+): Promise<void> {
+	let body: ScaffoldTemplateBody = {};
+	try {
+		const raw = await readBody(req, MAX_PATCH_BODY_BYTES);
+		if (raw.trim()) {
+			const parsed = JSON.parse(raw) as unknown;
+			if (typeof parsed !== "object" || parsed === null) throw new Error("Body must be a JSON object");
+			body = parsed as ScaffoldTemplateBody;
+		}
+	} catch (err) {
+		sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+		return;
+	}
+
+	await ensureBuiltinRecipes();
+
+	const template = getTrackTemplate(templateId);
+	if (!template) {
+		sendJson(res, 404, { error: `Unknown template "${templateId}"` });
+		return;
+	}
+
+	const trackIdGuess =
+		template.kind === "study" && body.topic?.trim()
+			? slugify(body.topic.trim())
+			: slugify(templateId);
+	if (!body.overwrite && (await trackExists(trackIdGuess))) {
+		sendJson(res, 409, { error: `Track "${trackIdGuess}" already exists. Set overwrite: true to replace.` });
+		return;
+	}
+
+	try {
+		const result = await applyTrackTemplate({
+			templateId,
+			language: body.language,
+			topic: body.topic,
+			targetDir: body.targetDir,
+			trackId: trackIdGuess,
+		});
+		sendJson(res, 201, {
+			track: result.track,
+			targetDir: result.targetDir,
+			filesWritten: result.filesWritten,
+			warnings: result.warnings,
+		});
+	} catch (err) {
+		sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+	}
 }
 
 // --- PATCH /api/tracks/:id (writable dashboard) -----------------------------
@@ -563,6 +650,17 @@ function validatePatchBody(raw: unknown): PatchTrackBody {
 		out.scan_glossary = obj.scan_glossary;
 	}
 	return out;
+}
+
+async function handleDeleteTrack(id: string, res: ServerResponse): Promise<void> {
+	try {
+		await deleteTrack(id);
+		sendJson(res, 200, { ok: true });
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		const status = msg.includes("not found") ? 404 : 400;
+		sendJson(res, status, { error: msg });
+	}
 }
 
 async function handlePatchTrack(

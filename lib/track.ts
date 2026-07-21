@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
 	INDEX_FILE,
@@ -91,6 +91,23 @@ export interface GlossaryEntry {
 	revised_at?: string;
 }
 
+export type ExerciseStatus = "todo" | "in_progress" | "passing" | "reviewing";
+
+export interface Exercise {
+	spec: string;
+	starter_path?: string;
+	test_command: string;
+	test_path?: string;
+	status: ExerciseStatus;
+	last_run_at?: string;
+}
+
+export interface ReferenceMaterial {
+	summary: string;
+	sources: Array<{ title: string; url: string }>;
+	glossary_terms?: string[];
+}
+
 export interface MaterialUnit {
 	id: string;
 	title: string;
@@ -100,6 +117,8 @@ export interface MaterialUnit {
 	notes?: string;
 	/** Per-unit reading resources; travel with this unit. */
 	resources?: Resource[];
+	exercise?: Exercise;
+	reference?: ReferenceMaterial;
 }
 
 export interface MaterialGraph {
@@ -311,6 +330,25 @@ export async function saveTrack(track: Track): Promise<void> {
 	await ensureLearnRoot();
 	await atomicWrite(trackFile(track.id), JSON.stringify(track, null, 2) + "\n");
 	await upsertIndex(track);
+}
+
+/**
+ * Remove a track from disk and drop it from the index.
+ * Does not delete cue plist, work_dir, or session log entries.
+ */
+export async function deleteTrack(trackId: string): Promise<void> {
+	if (!(await trackExists(trackId))) {
+		throw new Error(`Track "${trackId}" not found`);
+	}
+
+	await unlink(trackFile(trackId));
+
+	const index = await loadIndex();
+	index.tracks = index.tracks.filter((t) => t.id !== trackId);
+	if (index.active_track_id === trackId) {
+		index.active_track_id = null;
+	}
+	await saveIndex(index);
 }
 
 export async function listTrackIds(): Promise<string[]> {
@@ -589,6 +627,54 @@ export function addUnit(track: Track, title: string, now: string): Track {
 	};
 }
 
+function assertUnitCanBeDone(unit: MaterialUnit, nextStatus: MaterialUnit["status"]): void {
+	if (nextStatus !== "done") return;
+	if (unit.exercise && unit.exercise.status !== "passing") {
+		throw new Error(
+			`unit "${unit.id}" has an exercise that is not passing — complete the exercise before marking done`,
+		);
+	}
+}
+
+function validateExercise(exercise: Exercise): void {
+	if (!exercise.spec.trim()) throw new Error("exercise spec must be non-empty");
+	if (!exercise.test_command.trim()) throw new Error("exercise test_command must be non-empty");
+}
+
+function validateReference(reference: ReferenceMaterial): void {
+	if (!reference.summary.trim()) throw new Error("reference summary must be non-empty");
+}
+
+/** Resolve the unit whose exercise the learner should work on now. */
+export function resolveActiveExerciseUnit(track: Track): MaterialUnit | null {
+	const units = track.material_graph.units;
+	const inProgress = units.find((u) => u.exercise?.status === "in_progress");
+	if (inProgress) return inProgress;
+	const active = units.find((u) => u.status === "active" && u.exercise);
+	if (active) return active;
+	const pending = units.find((u) => u.status === "pending" && u.exercise);
+	if (pending) return pending;
+	return null;
+}
+
+export function unitsWithExercises(track: Track): MaterialUnit[] {
+	return track.material_graph.units.filter((u) => u.exercise);
+}
+
+function advanceGraphAfterExercisePass(units: MaterialUnit[], passedUnitId: string): MaterialUnit[] {
+	const idx = units.findIndex((u) => u.id === passedUnitId);
+	if (idx === -1) return units;
+	return units.map((u, i) => {
+		if (u.id === passedUnitId) {
+			return { ...u, status: "done" as const, exercise: u.exercise ? { ...u.exercise, status: "passing" as const } : u.exercise };
+		}
+		if (i === idx + 1 && u.status === "pending") {
+			return { ...u, status: "active" as const };
+		}
+		return u;
+	});
+}
+
 export function updateUnit(
 	track: Track,
 	unitId: string,
@@ -599,9 +685,66 @@ export function updateUnit(
 	const units = track.material_graph.units.map((u) => {
 		if (u.id !== unitId) return u;
 		found = true;
+		if (patch.status !== undefined) assertUnitCanBeDone(u, patch.status);
 		return { ...u, ...patch };
 	});
 	if (!found) throw new Error(`unit "${unitId}" not found`);
+	return {
+		...track,
+		material_graph: { ...track.material_graph, units, revised_at: now },
+	};
+}
+
+export function setUnitExercise(track: Track, unitId: string, exercise: Exercise, now: string): Track {
+	validateExercise(exercise);
+	let found = false;
+	const units = track.material_graph.units.map((u) => {
+		if (u.id !== unitId) return u;
+		found = true;
+		return { ...u, exercise };
+	});
+	if (!found) throw new Error(`unit "${unitId}" not found`);
+	return {
+		...track,
+		material_graph: { ...track.material_graph, units, revised_at: now },
+	};
+}
+
+export function setUnitReference(track: Track, unitId: string, reference: ReferenceMaterial, now: string): Track {
+	validateReference(reference);
+	let found = false;
+	const units = track.material_graph.units.map((u) => {
+		if (u.id !== unitId) return u;
+		found = true;
+		return { ...u, reference };
+	});
+	if (!found) throw new Error(`unit "${unitId}" not found`);
+	return {
+		...track,
+		material_graph: { ...track.material_graph, units, revised_at: now },
+	};
+}
+
+export function setUnitExerciseStatus(
+	track: Track,
+	unitId: string,
+	status: ExerciseStatus,
+	now: string,
+): Track {
+	let found = false;
+	let units = track.material_graph.units.map((u) => {
+		if (u.id !== unitId) return u;
+		found = true;
+		if (!u.exercise) throw new Error(`unit "${unitId}" has no exercise`);
+		return {
+			...u,
+			exercise: { ...u.exercise, status, last_run_at: now },
+		};
+	});
+	if (!found) throw new Error(`unit "${unitId}" not found`);
+	if (status === "passing") {
+		units = advanceGraphAfterExercisePass(units, unitId);
+	}
 	return {
 		...track,
 		material_graph: { ...track.material_graph, units, revised_at: now },

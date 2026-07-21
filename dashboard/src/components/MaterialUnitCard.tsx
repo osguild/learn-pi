@@ -15,6 +15,13 @@ const STATUS_LABEL: Record<MaterialUnit["status"], string> = {
   skipped: "skipped",
 };
 
+const EXERCISE_STATUS_LABEL: Record<NonNullable<MaterialUnit["exercise"]>["status"], string> = {
+  todo: "todo",
+  in_progress: "in progress",
+  passing: "passing",
+  reviewing: "reviewing",
+};
+
 interface Props {
   trackId: string;
   unit: MaterialUnit;
@@ -87,6 +94,40 @@ export function MaterialUnitCard({ trackId, unit, onTrackChanged }: Props) {
         className="unit-card-title"
         disabled={busy}
       />
+
+      {unit.exercise && (
+        <div className="unit-card-field">
+          <span className="unit-card-label">exercise</span>
+          <span className={`exercise-status-pill exercise-${unit.exercise.status}`}>
+            {EXERCISE_STATUS_LABEL[unit.exercise.status]}
+          </span>
+          <p className="unit-exercise-spec dim small">{unit.exercise.spec}</p>
+          {unit.exercise.starter_path && (
+            <p className="dim small mono">file: {unit.exercise.starter_path}</p>
+          )}
+          {unit.exercise.test_command && (
+            <p className="dim small mono">verify: {unit.exercise.test_command}</p>
+          )}
+        </div>
+      )}
+
+      {unit.reference && (
+        <div className="unit-card-field">
+          <span className="unit-card-label">reference</span>
+          <p className="unit-reference-summary dim small">{unit.reference.summary}</p>
+          {unit.reference.sources.length > 0 && (
+            <ul className="unit-reference-sources dim small">
+              {unit.reference.sources.map((s) => (
+                <li key={s.url}>
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    {s.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="unit-card-field">
         <span className="unit-card-label">prerequisites</span>
