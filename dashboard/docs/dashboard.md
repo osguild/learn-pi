@@ -70,6 +70,8 @@ Increments when a session makes no edge progress and resolves no yak; resets whe
 
 Sequenced learning units for the track — chapters, exercises, or milestones. Each unit is a card showing status (pending, active, done, skipped), difficulty, prerequisites, notes, and per-unit resources. Built with `/learn-plan` or scaffold wizards.
 
+On programming tracks each unit may also carry an **exercise** and **reference** block (both optional, both read-only in the dashboard — see *Exercises & reference* below).
+
 ### Glossary
 
 Track-wide technical terms from course documentation — definitions keyed to unit guides and source docs. Lives on the Track record (`glossary[]`); visibility only, not gated on progress.
@@ -112,17 +114,50 @@ History of reflected sessions: minutes spent, whether the edge was crossed, note
 
 ### Work dir & verify
 
-`work_dir` is where you code or take notes. `verify_command` is the test or check that confirms edge progress (e.g. `cargo test -p …`). Editable via `/learn-plan`.
+`work_dir` is where you code or take notes. `verify_command` is the **fallback** check that confirms edge progress (e.g. `cargo test -p …`). On units that ship an `exercise`, the per-unit `exercise.test_command` is the primary pass/fail signal — `verify_command` only applies to exercise-less units. Editable via `/learn-plan`.
+
+## Exercises & reference
+
+The load-bearing product on programming tracks: **every unit carries an exercise the learner implements by hand**, paired with **synthesized reference material** (the minimum domain knowledge to attempt it). The dashboard's role is *visibility* — authoring and pass/fail happen in pi, not the browser (Strategy B: dashboard plans, pi does).
+
+### What the dashboard shows
+
+On each material unit card (when present):
+
+- **Exercise status pill** — `todo` / `in progress` / `passing` / `reviewing`. The pill color follows status.
+- **Exercise spec** — the concrete prompt the learner is implementing.
+- **Starter file** — `exercise.starter_path`, repo-relative under `work_dir`.
+- **Verify command** — `exercise.test_command` (the per-unit pass/fail signal).
+- **Reference summary** — the concept primer.
+- **Reference sources** — links to docs/books the summary distills.
+
+The TUI dashboard widget (`renderTrackDashboard`) also surfaces a single **active exercise line** — the unit `resolveActiveExerciseUnit` picks (in_progress → active → pending) with its current status.
+
+### What the dashboard does **not** do
+
+- It does **not** run tests. `exercise.test_command` is displayed as text; pi runs it.
+- It does **not** flip `exercise.status` to `passing`. That happens in `/learn-reflect` (or via the agent offering it on green during `/learn-start`). The dashboard cannot PATCH `set_unit_exercise_status` — the server rejects it.
+- It does **not** (yet) author `exercise.*` or `reference.*` fields. Editing these today happens via starter templates or the one-shot `scripts/backfill-exercises.ts`; `/learn-plan exercise` / `/learn-plan reference` CLI subcommands are planned but not yet wired.
+
+### Integrity rules (enforced in `lib/track.ts`)
+
+- A unit with an exercise **cannot be marked `done`** until `exercise.status === "passing"`. The dashboard's status dropdown will appear to succeed but the save throws — the error surfaces in the card's edit-error area.
+- `exercise.spec` and `exercise.test_command` must be non-empty (validated on write).
+- `reference.summary` must be non-empty (validated on write).
+
+### Track completion
+
+A track is "complete" when its exercises are passing and reviewed — not when units are marked `done` by hand. The dashboard reflects this: the status pill is the real signal, the unit status dropdown is downstream of it.
 
 ## Track types
 
 ### Programming track
 
-Default kind. Edge progress is verified by running tests or commands in `work_dir`.
+Default kind. Edge progress is verified by running tests or commands in `work_dir`. Programming tracks are the only kind that ship **exercises + reference** on material units (see above).
 
 ### Study track
 
-Non-coding topics. Uses a rubric (self-assessment questions) instead of a verify command. Created with `/learn-study`.
+Non-coding topics. Uses a rubric (self-assessment questions) instead of a verify command. Created with `/learn-study`. Units on study tracks do **not** carry exercise/reference blocks — those fields are programming-only.
 
 ## Common commands
 
@@ -132,8 +167,8 @@ Non-coding topics. Uses a rubric (self-assessment questions) instead of a verify
 | `/learn-dashboard stop` | Stop the running server |
 | `/learn-dashboard status` | Show whether the server is running |
 | `/learn-dashboard open` | Open the browser for a running server |
-| `/learn-start [track] [energy]` | Begin a session |
-| `/learn-reflect` | Debrief and update edge + next action |
+| `/learn-start [track] [energy]` | Open the active exercise and start the coding + review loop |
+| `/learn-reflect` | Debrief, advance the exercise unit, and update edge + next action |
 | `/learn-status` | Quick text overview of all tracks |
 | `/learn-plan` | Edit material graph and edge |
 | `/learn-glossary [list\|add\|update\|remove\|scan]` | Manage glossary entries |
@@ -157,5 +192,9 @@ The dashboard writes through `PATCH /api/tracks/:id`. Supported operations:
 **Scalars:** `edge`, `next_action`, `outcome_compass`, `verify_command`, `session_min`, `overview`
 
 **Collections:** `add_unit`, `update_unit`, `add_resource`, `add_yak`, `resolve_yak`, `add_glossary`, `update_glossary`, `remove_glossary`, `scan_glossary`
+
+**Not yet exposed (planned):** `set_unit_exercise`, `set_unit_reference` — authoring exercise/reference blocks. Until these land, edit those fields via starter templates or `scripts/backfill-exercises.ts`.
+
+**Deliberately blocked (Strategy B):** `set_unit_exercise_status` — the dashboard may not flip exercise status to `passing`. Only `/learn-reflect` (or the agent offering it on green during `/learn-start`) may. A PATCH containing this key is rejected with a 400.
 
 All writes are atomic (tmp + rename) via the same mutators as the pi extensions.

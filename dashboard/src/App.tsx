@@ -5,7 +5,7 @@ import { Home } from "./components/Home";
 import { TrackDetail } from "./components/TrackDetail";
 import { MarkdownViewer } from "./components/MarkdownViewer";
 import { DocsViewer } from "./components/DocsViewer";
-import { Nav, docBreadcrumbs, docsBreadcrumbs, trackBreadcrumbs } from "./components/Nav";
+import { Nav, docBreadcrumbs, docsBreadcrumbs, roadmapBreadcrumbs, trackBreadcrumbs } from "./components/Nav";
 import { navigateAppRoute, parseAppRoute, type AppRoute } from "./utils/routes";
 
 const POLL_MS = 5000;
@@ -141,6 +141,11 @@ export default function App() {
     navigateAppRoute(route);
     setAppRoute(route);
   };
+  const goToRoadmap = () => {
+    const route: AppRoute = { kind: "docs", slug: "roadmap" };
+    navigateAppRoute(route);
+    setAppRoute(route);
+  };
   const backFromOverlay = () => {
     if (appRoute?.kind === "doc") {
       goToTrack(appRoute.trackId);
@@ -161,6 +166,8 @@ export default function App() {
   );
   if (appRoute?.kind === "track" && selected) {
     breadcrumbs = trackBreadcrumbs(selected);
+  } else if (appRoute?.kind === "docs" && appRoute.slug === "roadmap") {
+    breadcrumbs = roadmapBreadcrumbs();
   } else if (appRoute?.kind === "docs") {
     breadcrumbs = docsBreadcrumbs();
   } else if (appRoute?.kind === "doc" && selected) {
@@ -176,6 +183,7 @@ export default function App() {
         onGoHome={goHome}
         onSelectTrack={goToTrack}
         onGoDocs={goToDocs}
+        onGoRoadmap={goToRoadmap}
         timerChip={timerChip}
         breadcrumbs={breadcrumbs}
       />

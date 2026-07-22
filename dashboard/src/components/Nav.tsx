@@ -8,6 +8,7 @@ interface NavProps {
   onGoHome: () => void;
   onSelectTrack: (id: string) => void;
   onGoDocs: () => void;
+  onGoRoadmap: () => void;
   /** Optional timer chip rendered on the right of the bar. */
   timerChip?: React.ReactNode;
   /** Breadcrumb elements rendered under the bar. */
@@ -24,6 +25,7 @@ export function Nav({
   onGoHome,
   onSelectTrack,
   onGoDocs,
+  onGoRoadmap,
   timerChip,
   breadcrumbs,
 }: NavProps) {
@@ -58,6 +60,9 @@ export function Nav({
           </details>
           <button type="button" className="nav-docs-btn" onClick={onGoDocs}>
             Docs
+          </button>
+          <button type="button" className="nav-docs-btn" onClick={onGoRoadmap}>
+            Roadmap
           </button>
         </div>
         <div className="nav-right">{timerChip}</div>
@@ -106,6 +111,16 @@ export function docsBreadcrumbs() {
       <Crumb label="learn-pi" href={homeHref()} />
       <span className="crumb-sep">/</span>
       <Crumb label="Docs" current />
+    </>
+  );
+}
+
+export function roadmapBreadcrumbs() {
+  return (
+    <>
+      <Crumb label="learn-pi" href={homeHref()} />
+      <span className="crumb-sep">/</span>
+      <Crumb label="Roadmap" current />
     </>
   );
 }
