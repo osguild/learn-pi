@@ -60,10 +60,18 @@ The `/learn-web search <q>` and `/learn-web fetch <url>` subcommands call learn-
 
 ## Install
 
-From GitHub (once published):
+**Alpha** — API and UX may change. Feedback welcome via [GitHub issues](https://github.com/osguild/learn-pi/issues).
+
+From npm (recommended):
 
 ```bash
-pi install git:github.com/osguild/learn-pi
+pi install npm:@osguild/learn-pi@alpha
+```
+
+From GitHub (pinned tag):
+
+```bash
+pi install git:github.com/osguild/learn-pi@v0.1.0-alpha.0
 ```
 
 Try it locally without installing:
@@ -134,8 +142,8 @@ The wizard's suggested edge is **not** auto-accepted — `/learn-plan` surfaces 
 - [x] Literature verification (2026-07-13) — every verdict checked against current research via live web search; 3 refinements recorded in `research.md`. The 2026 McLeod/Miller-Felton/Kim chapter on AI support for ADHD + SRL is a near-direct precedent.
 - [x] v1: persistence layer, `/learn-start`, `/learn-timer`, `/learn-scaffold` (recipe + generic wizard), `/learn-study` (study-track scaffolder + rubric), `/learn-cue`, `/learn-yaks`, `/learn-reflect` (with folded rubric for study tracks), `/learn-plan`, `/learn-status`, `/learn-migrate`, `/learn-web` + `web_search` + `web_fetch` (with deferral to `pi-web-access` when installed), `/learn-dashboard` (writable local UI), `/learn-glossary` (track glossary + unit-guide scan)
 - [ ] `/learn-ingest` (v1.1) — RAG-grounded auto-decomposition of external material into learnable units, sequenced against the edge, iteratively revised by the reflection loop (per PathBuilder ACL 2026 + Hierarchical KG-Augmented LLM ACM 2026). Plus related cross-track interleaving (Brunmair & Richter 2019; Li et al. 2024).
-- [ ] Local install validation (`pi -e .` and `pi install .` end-to-end)
-- [ ] Published to npm as `@osguild/learn-pi`
+- [x] Published to npm as `@osguild/learn-pi` (alpha: `0.1.0-alpha.0`, tag `alpha`)
+- [ ] Local install validation (`pi -e .` and `pi install .` end-to-end) — ongoing
 - [ ] Deferred past v1.1: spaced repetition, within-track interleaving, retention-oriented features (revisit only after the completion problem is solved)
 
 ## License

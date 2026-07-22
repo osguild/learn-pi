@@ -1,14 +1,33 @@
 {
   "name": "@osguild/learn-pi",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.0",
   "description": "A learning-completion harness for pi — edge marker, pre-computed next action, flow-shaped sessions, cue/routine/reward loop, scope guard + scaffolder, and reflection loop.",
-  "keywords": ["pi-package"],
+  "keywords": ["pi-package", "pi", "learning", "adhd", "socratic"],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/osguild/learn-pi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/osguild/learn-pi/issues"
+  },
+  "homepage": "https://github.com/osguild/learn-pi#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "extensions",
+    "lib",
+    "skills",
+    "dashboard/dist",
+    "dashboard/docs"
+  ],
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dashboard:dev": "concurrently -n api,web -c blue,green \"tsx lib/dashboard.ts\" \"cd dashboard && vite\"",
     "dashboard:build": "cd dashboard && vite build",
-    "dashboard:preview": "tsx lib/dashboard.ts"
+    "dashboard:preview": "tsx lib/dashboard.ts",
+    "prepublishOnly": "pnpm dashboard:build"
   },
   "pi": {
     "extensions": ["./extensions/index.ts"],
