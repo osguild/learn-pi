@@ -65,7 +65,6 @@ export function renderTrackDashboard(
 	for (const l of wrapWords(`compass: ${compass}`, innerWidth)) {
 		lines.push(theme.fg("dim", `  ${l}`));
 	}
-	lines.push(theme.fg("warning", "  edge:") + ` ${truncatePlain(track.edge.statement, innerWidth - 8)}`);
 	if (exerciseUnit?.exercise) {
 		const ex = exerciseUnit.exercise;
 		lines.push(
@@ -76,6 +75,7 @@ export function renderTrackDashboard(
 			lines.push(theme.fg("dim", `    file: ${truncatePlain(ex.starter_path, innerWidth - 10)}`));
 		}
 	} else {
+		lines.push(theme.fg("warning", "  edge:") + ` ${truncatePlain(track.edge.statement, innerWidth - 8)}`);
 		lines.push(theme.fg("success", "  next:") + ` ${truncatePlain(track.next_action, innerWidth - 8)}`);
 	}
 	if (track.stall_counter > 0) {

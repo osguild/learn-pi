@@ -1,6 +1,6 @@
 /**
  * learn-pi — entry point. Composes all sub-extensions and registers the
- * session_start widget that renders the active track's edge + next_action
+ * session_start widget that renders the active track's exercise (or edge + next_action)
  * before any command runs.
  *
  * This is the architectural fix for the socrates-plan failure: persistence is
@@ -56,7 +56,7 @@ export default function learnPi(pi: ExtensionAPI) {
 	learnTui(pi);
 
 	// The persistence fix: on session_start, render the active track's
-	// edge + next_action as a widget immediately. No command required.
+	// exercise (or edge + next_action) as a widget immediately. No command required.
 	// This is what socrates-plan failed to do.
 	pi.on("session_start", async (_event, ctx) => {
 		await ensureLearnRoot();
