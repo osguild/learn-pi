@@ -37,20 +37,31 @@ let server: DashboardServer | null = null;
 
 type DashboardProbe = "ok" | "stale" | "none";
 
+const REQUIRED_FEATURES = ["templates", "markdown", "docs"] as const;
+
 async function probeDashboard(port: number): Promise<DashboardProbe> {
+	const base = `http://127.0.0.1:${port}`;
 	try {
-		const templates = await fetch(`http://127.0.0.1:${port}/api/templates`, {
-			signal: AbortSignal.timeout(1500),
-		});
-		if (templates.ok) return "ok";
-		if (templates.status === 404) {
-			const text = await templates.text();
+		const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1500) });
+		if (health.ok) {
+			const body = (await health.json()) as { features?: string[] };
+			const features = new Set(body.features ?? []);
+			if (REQUIRED_FEATURES.every((f) => features.has(f))) return "ok";
+			return "stale";
+		}
+		if (health.status === 404) {
+			const text = await health.text();
 			if (text.includes("Unknown route")) return "stale";
 		}
-		// Something is listening but lacks the templates API (pre-template dashboard).
-		const index = await fetch(`http://127.0.0.1:${port}/api/index`, {
-			signal: AbortSignal.timeout(1500),
-		});
+		// Pre-health dashboards: probe routes the UI depends on.
+		for (const path of ["/api/templates", "/api/markdown", "/api/docs/readme"]) {
+			const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(1500) });
+			if (res.status === 404) {
+				const text = await res.text();
+				if (text.includes("Unknown route")) return "stale";
+			}
+		}
+		const index = await fetch(`${base}/api/index`, { signal: AbortSignal.timeout(1500) });
 		if (index.ok) return "stale";
 	} catch {
 		// Port closed or not a dashboard server.
@@ -112,7 +123,7 @@ async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContex
 	if (staleOnPreferred === "stale") {
 		ctx.ui.notify(
 			[
-				`Port ${preferredPort} has an outdated dashboard (missing /api/templates).`,
+				`Port ${preferredPort} has an outdated dashboard (missing /api/markdown or other routes).`,
 				"Stop it in the other pi session (/learn-dashboard stop) or quit that pi,",
 				"restart pi to load the latest learn-pi code, then /learn-dashboard start again.",
 			].join(" "),
@@ -166,7 +177,7 @@ async function cmdStart(portArg: string | undefined, ctx: ExtensionCommandContex
 	const apiOk = (await probeDashboard(server.port)) === "ok";
 	if (!apiOk) {
 		ctx.ui.notify(
-			"Templates API missing — restart pi to load the latest learn-pi code, then /learn-dashboard stop && start.",
+			"Dashboard API outdated (missing /api/markdown or /api/health). Restart pi, then /learn-dashboard stop && start.",
 			"warning",
 		);
 	}

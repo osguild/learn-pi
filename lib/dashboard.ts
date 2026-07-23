@@ -14,6 +14,7 @@
  *   GET  /api/sessions            -> SessionLogLine[] (cross-track, newest last)
  *   GET  /api/timer               -> TimerState (best-effort; null if absent)
  *   GET  /api/markdown?track=&url= -> MarkdownDocument (local .md under work_dir)
+ *   GET  /api/health              -> { ok, features } (capability probe for stale-server detection)
  *   GET  /api/templates           -> TrackTemplateMeta[]
  *   POST /api/templates/:id/scaffold -> { track, targetDir, filesWritten }
  *
@@ -223,6 +224,13 @@ async function apiRoute(
 	if (templateScaffoldMatch && req.method === "POST") {
 		const templateId = decodeURIComponent(templateScaffoldMatch[1]);
 		await handleTemplateScaffold(templateId, req, res);
+		return;
+	}
+	if (pathname === "/api/health") {
+		sendJson(res, 200, {
+			ok: true,
+			features: ["index", "tracks", "sessions", "timer", "markdown", "docs", "templates", "patch"],
+		});
 		return;
 	}
 	if (pathname === "/api/index") {
